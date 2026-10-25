@@ -1,0 +1,1275 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>나의 일일 체크리스트</title>
+<meta name="apple-mobile-web-app-title" content="주간 체크">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+@font-face { font-family: "A2Z-R"; src: local("A2Z 4 Regular"), local("A2Z4Regular"), local("A2Z-4Regular"); }
+@font-face { font-family: "A2Z-B"; src: local("A2Z 7 Bold"), local("A2Z7Bold"), local("A2Z-7Bold"); }
+:root { --bg:#f4f2ee; --card:#fff; --ink:#1d1d1f; --sub:#6b6b70; --line:#e2dfd8; --ok:#2f7d4f; --warn:#c2571a; --na:#8a8a90; --admin:#2d4f8a;
+        --R:"A2Z-R","A2Z 4 Regular","Malgun Gothic",sans-serif; --B:"A2Z-B","A2Z 7 Bold","Malgun Gothic",sans-serif; }
+* { box-sizing: border-box; }
+html, body { font-family: var(--R); }
+button, input, select, textarea, dialog { font-family: inherit; }
+body { margin:0; background:var(--bg); color:var(--ink); }
+body.admin { background:#eef1f6; }
+main { max-width:780px; margin:0 auto; padding:24px 16px 130px; }
+.top { display:flex; align-items:flex-start; gap:12px; }
+.top > div { flex:1; }
+h1 { font-family:var(--B); font-size:26px; margin:0 0 4px; }
+.lead { color:var(--sub); margin:0 0 16px; font-size:14px; }
+body.admin [data-t] { outline:1.5px dashed var(--admin); outline-offset:3px; border-radius:0; cursor:text; }
+.adminbar { display:none; background:var(--admin); color:#fff; border-radius:0; padding:12px 14px; margin-bottom:14px; font-size:14px; }
+body.admin .adminbar { display:block; }
+.adminbar p { margin:0 0 10px; line-height:1.5; }
+.adminbar button { background:rgba(255,255,255,.14); color:#fff; border-color:rgba(255,255,255,.35); margin:0 6px 6px 0; }
+.adminbar label { display:flex; gap:8px; align-items:center; margin:4px 0 10px; }
+.adminbar label input { flex:1; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:0; padding:16px 18px; margin-bottom:14px; }
+.card h2 { font-family:var(--B); font-size:17px; margin:0 0 10px; display:flex; gap:8px; align-items:center; }
+.card h2 .t { flex:1; }
+.card h2 small { color:var(--sub); font-family:var(--R); font-size:13px; }
+.rec { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.rec select { flex:1; min-width:200px; }
+.info { display:grid; grid-template-columns:110px 1fr; gap:8px 10px; align-items:center; }
+.info > span { color:var(--sub); font-size:14px; }
+input[type=text], input[type=date], input[type=password], select, textarea { font-size:15px; padding:7px 9px; border:1px solid var(--line); border-radius:0; width:100%; background:#fff; color:var(--ink); }
+textarea { min-height:70px; resize:vertical; }
+.item { border-top:1px solid #f0eee9; padding:6px 2px; }
+.item:first-of-type { border-top:0; }
+.row { display:flex; gap:10px; align-items:flex-start; }
+.row label { flex:1; display:flex; gap:10px; align-items:flex-start; cursor:pointer; font-size:15px; line-height:1.45; padding-top:2px; }
+.row input[type=checkbox] { width:20px; height:20px; margin:1px 0 0; accent-color:var(--ok); flex:none; cursor:pointer; }
+.item.done label span { color:var(--sub); }
+.item.na label span { color:var(--na); }
+.chip { flex:none; font-size:12px; color:#fff; background:var(--na); border-radius:0; padding:3px 9px; margin-top:2px; }
+.note { margin:6px 0 2px 30px; }
+.note input { font-size:14px; padding:5px 8px; background:#fbfaf7; }
+.sm { font-size:13px; padding:4px 9px; border-radius:0; flex:none; }
+.sm.on { background:var(--na); border-color:var(--na); color:#fff; }
+.edit { flex:1; }
+.card.editing { border:2px solid var(--admin); background:#f6f8fc; }
+.card h2 .sm.main { font-family:var(--B); }
+.grip { flex:none; cursor:grab; color:var(--sub); font-size:18px; line-height:34px; padding:0 2px; user-select:none; }
+.item.dropto { box-shadow:inset 0 3px 0 var(--admin); }
+.add { margin-top:8px; color:var(--admin); border-style:dashed; width:100%; }
+.del { color:#b3261e; }
+.bar { position:fixed; left:0; right:0; bottom:0; background:rgba(255,255,255,.97); border-top:1px solid var(--line); }
+.bar > div { max-width:780px; margin:0 auto; padding:10px 16px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.bar .st { flex:1; min-width:180px; }
+.bar b { display:block; font-size:15px; font-family:var(--B); }
+.bar small { color:var(--sub); font-size:12px; }
+.bar small.dirty { color:var(--warn); }
+button { font-size:15px; padding:10px 14px; border-radius:0; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; }
+button.main { background:var(--ink); color:#fff; border-color:var(--ink); font-family:var(--B); }
+button.save { background:var(--ok); color:#fff; border-color:var(--ok); font-family:var(--B); }
+.drop { border:2px dashed var(--line); border-radius:0; padding:14px; text-align:center; color:var(--sub); font-size:14px; }
+.drop.over { border-color:var(--ok); background:#f1f8f3; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:12px; margin-top:12px; }
+.att { border:1px solid var(--line); border-radius:0; overflow:hidden; background:#fbfaf7; display:flex; flex-direction:column; }
+.att .th { position:relative; aspect-ratio:16/10; background:#222; cursor:pointer; }
+.att .th img { width:100%; height:100%; object-fit:contain; display:block; }
+.att .badge { position:absolute; left:6px; bottom:6px; background:rgba(0,0,0,.7); color:#fff; font-size:12px; padding:2px 7px; border-radius:0; }
+.att .x { position:absolute; right:6px; top:6px; padding:2px 8px; font-size:13px; background:rgba(255,255,255,.9); }
+.att .nm { font-size:12px; color:var(--sub); padding:6px 8px 0; word-break:break-all; }
+.att input { margin:6px 8px 8px; width:calc(100% - 16px); font-size:13px; padding:5px 7px; }
+dialog { border:0; border-radius:0; padding:22px; width:min(400px, calc(100% - 32px)); box-shadow:0 12px 40px rgba(0,0,0,.25); }
+dialog p { margin:0 0 14px; font-size:16px; line-height:1.5; white-space:pre-line; }
+dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+.days { display:grid; grid-template-columns:repeat(7, 1fr); margin:0 0 14px; border:1px solid var(--line); background:#fff; }
+.days button { border:0; border-left:1px solid var(--line); border-radius:0; padding:8px 0; font-size:13px; line-height:1.35; background:#fff; color:var(--sub); }
+.days button:first-child { border-left:0; }
+.days button b { display:block; font-family:var(--B); font-size:16px; color:var(--ink); }
+.days button.today:not(.on) b { color:var(--ok); }
+.days button.on, .days button.on b { background:var(--ink); color:#fff; }
+.hint { color:var(--sub); font-size:13px; line-height:1.5; margin:-4px 0 10px; }
+.star { flex:none; border:0; border-radius:0; background:none; padding:0 3px; font-size:19px; line-height:22px; color:#c9c6bf; cursor:pointer; }
+.star.on { color:var(--warn); }
+.item.starred:not(.done):not(.na) label span { font-family:var(--B); }
+.task { display:grid; grid-template-columns:28px 22px 1fr auto auto auto; gap:6px; align-items:center; padding:6px 0; border-top:1px solid #f0eee9; }
+.task:first-child { border-top:0; }
+.task input[type=checkbox] { width:20px; height:20px; margin:0; accent-color:var(--ok); cursor:pointer; }
+.task .fs { display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
+.task .fs input, .task .fs select { flex:1 1 140px; min-width:0; font-size:14px; padding:6px 7px; }
+.task .txt { font-size:15px; line-height:1.45; }
+.task .from { color:var(--sub); font-size:12px; white-space:nowrap; }
+.task.done .fs input, .task.done .txt { color:var(--sub); text-decoration:line-through; }
+.task.starred:not(.done) .txt, .task.starred:not(.done) .fs input { font-family:var(--B); }
+.task.stock { grid-template-columns:1fr auto auto; }
+.task.stock.low { box-shadow:inset 3px 0 0 var(--warn); padding-left:9px; }
+.must { border-left:4px solid var(--warn); }
+.must h2 .t { color:var(--warn); }
+.mrow { display:flex; gap:10px; align-items:flex-start; padding:6px 0; border-top:1px solid #f0eee9; cursor:pointer; font-size:15px; line-height:1.45; }
+.mrow:first-child { border-top:0; }
+.mrow input { width:20px; height:20px; margin:1px 0 0; accent-color:var(--ok); flex:none; }
+.mrow span { flex:1; font-family:var(--B); }
+.mrow small { color:var(--sub); font-size:12px; white-space:nowrap; padding-top:3px; }
+@media (max-width:640px) { .task .from { grid-column:3; grid-row:2; } }
+.task .why { grid-column:3 / -1; }
+.task .why input { font-size:14px; padding:5px 8px; background:#fbfaf7; }
+.prev { border-left:4px solid var(--admin); }
+.prevtext { margin:0; white-space:pre-wrap; font-size:15px; line-height:1.55; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1 data-t="title"></h1>
+      <p class="lead" data-t="lead"></p>
+    </div>
+    <button id="adminBtn" class="sm">관리자</button>
+  </div>
+
+  <nav class="days" id="days"></nav>
+
+  <section class="card must" id="mustCard" hidden>
+    <h2><span class="t" data-t="must"></span><small id="mustCount"></small></h2>
+    <div id="mustList"></div>
+  </section>
+
+  <section class="card prev" id="prevCard" hidden>
+    <h2><span class="t" data-t="prev"></span><small id="prevDate"></small></h2>
+    <p class="prevtext" id="prevText"></p>
+  </section>
+
+  <div class="adminbar">
+    <p>관리자 모드 — 점선 친 제목·안내문·칸 이름은 눌러서 바로 고칩니다. 항목은 ↑↓ 순서, ✕ 삭제, 「+ 항목 추가」로 넣습니다.</p>
+    <label>이름 목록 <input type="text" id="areas" placeholder="전이사"></label>
+    <button id="addSec">+ 구역 추가</button>
+    <button id="resetCfg">기본 항목으로 되돌리기</button>
+    <button id="relink">저장 파일 다시 정하기</button>
+    <button id="pinBtn">비밀번호 변경</button>
+    <button id="adminEnd">관리 끝내기</button>
+  </div>
+
+  <section class="card">
+    <h2><span class="t">저장 기록</span></h2>
+    <div class="rec">
+      <select id="records"></select>
+      <button id="openRec" class="sm">열기</button>
+      <button id="loadFile" class="sm">파일에서 불러오기</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="t" data-t="info"></span></h2>
+    <div class="info">
+      <span data-t="l_date"></span><input type="date" id="f-date">
+      <span data-t="l_area"></span><select id="f-area"></select>
+      <span data-t="l_file"></span><input type="text" id="f-file" placeholder="꼭 끝낼 일 3개">
+      <span data-t="l_maker"></span><input type="text" id="f-maker">
+    </div>
+  </section>
+
+  <section class="card" id="carryCard" hidden>
+    <h2><span class="t" data-t="carry"></span><small id="carryCount"></small></h2>
+    <p class="hint">저장할 때 체크하지 못한 항목이 다음 날로 넘어옵니다. 하면 체크하고, 안 해도 되면 ✕로 지웁니다.</p>
+    <div id="carryList"></div>
+  </section>
+
+  <div id="sections"></div>
+
+  <section class="card">
+    <h2><span class="t" data-t="extra"></span><small id="extraCount"></small></h2>
+    <p class="hint">갑자기 맡게 된 봉사업무는 받자마자 적으세요. 끝내지 못하면 다음 날로 계속 이월됩니다. 못 한 이유는 「사유」에 적으세요.</p>
+    <div id="extraList"></div>
+    <button class="add" data-add="extra">+ 추가 봉사업무 적기</button>
+  </section>
+
+  <section class="card">
+    <h2><span class="t" data-t="todo"></span><small id="todoCount"></small></h2>
+    <p class="hint">끝내고 체크할 때까지 다음 날로 계속 이월됩니다.</p>
+    <div id="todoList"></div>
+    <button class="add" data-add="todo">+ 할 일 적기</button>
+  </section>
+
+  <section class="card">
+    <h2><span class="t" data-t="buy"></span><small id="buyCount"></small></h2>
+    <p class="hint">사서 체크할 때까지 다음 날로 계속 이월됩니다.</p>
+    <div id="buyList"></div>
+    <button class="add" data-add="buy">+ 구매할 일 적기</button>
+  </section>
+
+  <section class="card">
+    <h2><span class="t" data-t="stock"></span><small id="stockCount"></small></h2>
+    <p class="hint">날마다 그대로 이월되는 표입니다. 부족 · 없음이면 「구매에 넣기」로 구매할 일에 바로 올립니다.</p>
+    <div id="stockList"></div>
+    <button class="add" id="stockAdd">+ 재고 품목 추가</button>
+  </section>
+
+  <section class="card">
+    <h2><span class="t" data-t="attach"></span><small id="attCount"></small></h2>
+    <div class="drop" id="drop">사진·자료 파일을 여기로 끌어다 놓거나 <button id="attBtn" class="sm">+ 파일 첨부</button></div>
+    <input type="file" id="attFile" accept="image/*,video/*" multiple hidden>
+    <div class="grid" id="attGrid"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="t" data-t="memo"></span></h2>
+    <textarea id="f-memo" placeholder="오늘 있었던 일 · 메모 (이날에만 남습니다)"></textarea>
+  </section>
+
+  <section class="card">
+    <h2><span class="t" data-t="next"></span></h2>
+    <textarea id="f-next" placeholder="내일 할 일 · 전할 말 (다음 날 맨 위 「전날 넘긴 일」에 보입니다)"></textarea>
+  </section>
+</main>
+
+<div class="bar"><div>
+  <div class="st"><b id="count"></b><small id="saveState"></small></div>
+  <button id="reset">이날 비우기</button>
+  <button id="saveBtn" class="save">저장</button>
+  <button id="pdfBtn">PDF로 저장</button>
+  <button id="imgBtn" class="main">A4 이미지로 저장</button>
+</div></div>
+
+<dialog id="dlg"><form id="dlgForm">
+  <p id="dlgMsg"></p>
+  <input type="password" id="dlgIn" autocomplete="off">
+  <div class="btns"><button type="button" id="dlgNo">취소</button><button type="submit" class="main">확인</button></div>
+</form></dialog>
+
+<script>
+// [구역 제목, 항목, 월요일부터 며칠째(날짜 표시용)]
+const DEFAULT = [
+  ["월요일", [
+    "Key Nexus 앱 결재대기 확인",
+    "Key Nexus 앱 관리자소통 새 댓글 확인",
+    "FU 백업: 알림 창 확인 → 외장하드 JL1038·JL0327 연결해 넣기",
+    "지난 주일 광고 송출 결과 확인, 고칠 점 메모",
+    "이번 주 할 일·마감 정리",
+    "저녁 기도회",
+  ], 0],
+  ["화요일", [
+    "Key Nexus 앱 결재대기 확인",
+    "Key Nexus 앱 관리자소통 새 댓글 확인",
+    "세 교회 광고 자료 받기 (진주·청원·서울 주보, 목회자동정·교우동정)",
+    "저녁 기도회",
+  ], 1],
+  ["수요일", [
+    "Key Nexus 앱 결재대기 확인",
+    "Key Nexus 앱 관리자소통 새 댓글 확인",
+    "세교회광고 큐시트·대본 작성",
+    "나레이션(TTS) 한 파일로 만들기",
+    "저녁 기도회",
+  ], 2],
+  ["목요일", [
+    "Key Nexus 앱 결재대기 확인",
+    "Key Nexus 앱 관리자소통 새 댓글 확인",
+    "세교회광고 렌더 (진주판·서울판)",
+    "세교회광고 체크리스트로 1차 검수",
+    "저녁 기도회",
+  ], 3],
+  ["금요일", [
+    "Key Nexus 앱 결재대기 확인",
+    "Key Nexus 앱 관리자소통 새 댓글 확인",
+    "주보 발행 후 변경(추가·취소·일정) 담당자에게 확인",
+    "광고 수정 반영, 최종 검수",
+    "저녁 기도회",
+  ], 4],
+  ["토요일", [
+    "Key Nexus 앱 결재대기 확인",
+    "Key Nexus 앱 관리자소통 새 댓글 확인",
+    "송출 PC에서 광고 재생 확인",
+    "방송실 담당자에게 광고 순서·길이 전달",
+    "주일 준비 최종 점검",
+    "저녁 기도회",
+  ], 5],
+  ["주일", [
+    "Key Nexus 앱 결재대기 확인",
+    "Key Nexus 앱 관리자소통 새 댓글 확인",
+    "주일 예배 광고 송출 확인",
+    "52주 말씀강의: 남은 토큰으로 작업, 밤 11시 전에 멈춤",
+    "오늘 체크 「저장」 → 「A4 이미지로 저장」",
+  ], 6],
+];
+const DEFAULT_TEXTS = {
+  title: "나의 일일 체크리스트",
+  lead: "열면 오늘 요일이 나옵니다. ☆를 누르면 ★ 중요 표시가 되어 맨 위 「오늘 꼭 할 일」에 올라갑니다. 「저장」하면 체크 못 한 항목은 다음 날로 넘어가고, 추가 봉사업무 · 할 일 · 구매할 일은 끝낼 때까지 날마다 따라옵니다. 항목을 고칠 때는 요일 옆 「편집」(처음 비밀번호 0000).",
+  info: "기본 정보", memo: "메모 (오늘 내용)", attach: "사진 · 자료",
+  l_date: "날짜", l_area: "이름", l_file: "오늘 목표", l_maker: "중요 일정",
+  must: "★ 오늘 꼭 할 일", next: "내일로 넘길 일", prev: "전날 넘긴 일", carry: "넘어온 일", extra: "추가 봉사업무", todo: "할 일", buy: "구매할 일", stock: "재고",
+};
+// 주간판(v01) 기본 글 — 사용자가 고치지 않은 것만 새 글로 바꿈
+const OLD_TEXTS = {
+  title: "나의 일주일 체크리스트", lead: "요일마다 체크하고, 이번 주 해당 없는 항목은 「사유」를 누르세요. 항목은 요일 옆 「편집」(처음 비밀번호 0000)으로 고칩니다. 「저장」을 누르면 기록이 최신 내용으로 저장됩니다.",
+  info: "이번 주", memo: "메모 · 다음 주로 넘길 일", attach: "이번 주 사진 · 자료",
+  l_date: "주 시작일 (월)", l_file: "이번 주 목표", l_checker: "다음 주 준비",
+};
+const LEAD_V02 = "열면 오늘 요일이 나옵니다. 다른 날은 위 요일 칸을 누르세요. 해당 없는 항목은 「사유」를, 항목을 고칠 때는 요일 옆 「편집」(처음 비밀번호 0000)을 누르세요. 「저장」을 누르면 그날 기록이 남습니다.";
+const NA_TEXT = "해당 없음";
+
+// 저장 구조: db = { cfg(항목·제목·비밀번호), days{날짜: 그날 작성 내용}, date(보고 있는 날), records(저장한 날짜별 기록) }
+const $ = id => document.getElementById(id);
+const FIELDS = ["f-area","f-file","f-maker","f-memo","f-next"];
+const uid = () => Math.random().toString(36).slice(2, 9);
+const clone = o => JSON.parse(JSON.stringify(o));
+// 날짜는 "YYYY-MM-DD" 글자로 다룸 · 요일 번호는 월=0 … 주일=6 (구역의 day 와 같음)
+const WD = ["월", "화", "수", "목", "금", "토", "주일"];
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => ymd(new Date());
+const parse = s => new Date(s + "T00:00");
+const wd = s => (parse(s).getDay() + 6) % 7;
+const shift = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return ymd(d); };
+const monday = s => shift(s, -wd(s));
+const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "") && !isNaN(parse(s));
+const md = s => `${+s.slice(5, 7)}/${+s.slice(8)}(${WD[wd(s)]})`;
+const byStar = (a, b) => !!b.star - !!a.star;
+// 목록 한 줄을 글로 (이미지 · 오늘 꼭 할 일)
+const taskText = t => t.kind === "extra" ? [t.t, t.who, t.what].filter(Boolean).join("  ")
+  : t.kind === "buy" ? [t.what, t.qty, t.note && `(${t.note})`].filter(Boolean).join("  ") : (t.what || "");
+const read = k => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } };
+const defaultCfg = () => ({
+  pin: "0000", texts: { ...DEFAULT_TEXTS }, areas: ["전이사"],
+  sections: DEFAULT.map(([title, items, day], s) => ({ id: "s" + s, title, day, items: items.map((text, i) => ({ id: `d${s}-${i}`, text })) })),
+});
+const emptyCur = () => ({ checks: {}, na: {}, notes: {}, fields: {}, attach: [], editedAt: 0, savedAt: 0 });
+
+function normalize(d) {
+  d.cfg = Object.assign(defaultCfg(), d.cfg || {});
+  d.cfg.texts = { ...DEFAULT_TEXTS, ...(d.cfg.texts || {}) };
+  d.days = d.days || {};
+  d.records = d.records || {};
+  d.tasks = d.tasks || [];
+  d.stock = d.stock || [];
+  if (d.cur) {  // 주간판(v01) 한 장을 날짜별로 나눔
+    const old = Object.assign(emptyCur(), d.cur);
+    const mon = monday(isDate(old.fields["f-date"]) ? old.fields["f-date"] : today());
+    delete old.fields["f-date"];
+    d.cfg.sections.forEach(sec => {
+      if (sec.day == null) return;
+      const st = d.days[shift(mon, sec.day)] ||= emptyCur();
+      st.fields["f-area"] = old.fields["f-area"]; st.editedAt = old.editedAt; st.savedAt = old.savedAt;
+      sec.items.forEach(it => ["checks", "na", "notes"].forEach(k => { if (it.id in old[k]) st[k][it.id] = old[k][it.id]; }));
+    });
+    // 목표·메모·첨부는 그 주가 이번 주면 오늘, 아니면 그 주 월요일로
+    const rest = d.days[monday(today()) === mon ? today() : mon] ||= emptyCur();
+    Object.assign(rest.fields, old.fields); rest.attach = old.attach;
+    delete d.cur;
+    for (const k in OLD_TEXTS) if (d.cfg.texts[k] === OLD_TEXTS[k]) d.cfg.texts[k] = DEFAULT_TEXTS[k];
+    d.cfg.sections.forEach(sec => {
+      sec.items = sec.items.filter(it => it.text !== "「새 주 시작」으로 다음 주 준비");
+      sec.items.forEach(it => { if (it.text === "이번 주 체크리스트 「저장」 → 「A4 이미지로 저장」") it.text = "오늘 체크 「저장」 → 「A4 이미지로 저장」"; });
+    });
+  }
+  for (const k in d.days) {
+    const st = d.days[k] = Object.assign(emptyCur(), d.days[k]);
+    // v03 「끼어든 일」 → 추가 봉사업무 (‘바로’ 처리한 것은 그날 끝낸 일로)
+    (st.intr || []).filter(r => r.who || r.what || r.moved).forEach(r => d.tasks.push({ id: uid(), kind: "extra", date: k,
+      done: r.how === "바로" ? k : null, star: false, t: r.t || "", who: r.who || "",
+      what: [r.what, r.moved && `미룬 일: ${r.moved}`].filter(Boolean).join(" / ") }));
+    delete st.intr; delete st.fields["f-duty"];
+    // v04 「내일 준비」 칸 → 내일로 넘길 일
+    if (st.fields["f-checker"]) { st.fields["f-next"] = st.fields["f-next"] || st.fields["f-checker"]; delete st.fields["f-checker"]; }
+  }
+  if (d.cfg.texts.lead === LEAD_V02) d.cfg.texts.lead = DEFAULT_TEXTS.lead;
+  if (d.cfg.texts.memo === "메모 · 내일로 넘길 일") d.cfg.texts.memo = DEFAULT_TEXTS.memo;
+  d.date = today();  // 열 때는 늘 오늘
+  return d;
+}
+// 사진·영상 썸네일까지 들어가므로 localStorage(5MB) 대신 IndexedDB 에 보관
+let db;
+const cfg = () => db.cfg, cur = () => db.days[db.date] ||= emptyCur();
+// 보고 있는 날의 구역 = 그 요일 구역 + 요일 없는 구역(관리자가 더한 「매일」 구역)
+const daySecs = () => cfg().sections.filter(s => s.day == null || s.day === wd(db.date));
+let admin = false, storeError = false;
+let editSec = null, unlocked = false, dragSrc = null;  // 구역 하나만 편집 · 비밀번호는 창을 닫을 때까지 한 번만
+async function unlock() {
+  if (unlocked) return true;
+  const pin = await ask("관리자 비밀번호를 입력하세요.", true);
+  if (pin == null) return false;
+  if (pin !== cfg().pin) { await ask("비밀번호가 맞지 않습니다."); return false; }
+  return unlocked = true;
+}
+const persist = () => (db.at = Date.now(), idb("readwrite", s => s.put(db, "db")))
+  .then(() => { if (storeError) { storeError = false; showSaveState(); } })
+  .catch(() => { storeError = true; showSaveState(); });
+const touch = () => { cur().editedAt = Date.now(); persist(); showSaveState(); };
+
+// 글꼴이 바뀌지 않는 브라우저 기본 창 대신 쓰는 대화상자
+function ask(msg, withInput) {
+  return new Promise(res => {
+    const d = $("dlg"), inp = $("dlgIn");
+    let done = false;
+    const finish = ok => { if (done) return; done = true; if (d.open) d.close(); res(ok ? (withInput ? inp.value : true) : null); };
+    $("dlgMsg").textContent = msg;
+    inp.hidden = !withInput; inp.value = "";
+    $("dlgForm").onsubmit = e => { e.preventDefault(); finish(true); };
+    $("dlgNo").onclick = () => finish(false);
+    d.onclose = () => finish(false);  // Esc 키
+    d.showModal();
+    if (withInput) inp.focus();
+  });
+}
+// 보고 있는 날이 든 주의 월요일 + day → " 10월 24일"
+function dayTag(sec) {
+  if (sec.day == null) return "";
+  const d = parse(shift(monday(db.date), sec.day));
+  return ` ${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+function paintDays() {
+  const host = $("days"), mon = monday(db.date), t = today();
+  host.innerHTML = "";
+  WD.forEach((w, i) => {
+    const date = shift(mon, i), d = parse(date);
+    host.append(el("button", { className: (date === db.date ? "on" : "") + (date === t ? " today" : ""), title: date, onclick: () => go(date) },
+      el("b", { textContent: w }), `${d.getMonth() + 1}/${d.getDate()}`));
+  });
+}
+function go(date) { db.date = date; persist(); paintFields(); build(); }
+function el(tag, props = {}, ...kids) {
+  const e = Object.assign(document.createElement(tag), props);
+  kids.forEach(k => k && e.append(k));
+  return e;
+}
+function move(arr, i, d) {
+  const j = i + d;
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  persist(); build();
+}
+const timeStr = t => new Date(t).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// ---------- 화면 ----------
+function paintTexts() {
+  document.querySelectorAll("[data-t]").forEach(e => {
+    if (document.activeElement !== e) e.textContent = cfg().texts[e.dataset.t] ?? "";
+    e.contentEditable = admin ? "plaintext-only" : "false";
+  });
+  document.title = cfg().texts.title;
+  const sel = $("f-area"), v = cur().fields["f-area"] || sel.value;
+  sel.innerHTML = "";
+  const areas = cfg().areas.length ? cfg().areas : ["전이사"];
+  [...new Set([...areas, ...(v && !areas.includes(v) ? [v] : [])])].forEach(a => sel.append(el("option", { textContent: a })));
+  if (v) sel.value = v;
+  $("areas").value = cfg().areas.join(", ");
+}
+document.querySelectorAll("[data-t]").forEach(e => e.addEventListener("input", () => {
+  cfg().texts[e.dataset.t] = e.textContent; document.title = cfg().texts.title; persist();
+}));
+
+function paintRecords() {
+  const sel = $("records");
+  const keys = Object.keys(db.records).sort().reverse();
+  sel.innerHTML = "";
+  if (!keys.length) sel.append(el("option", { value: "", textContent: "저장한 기록 없음" }));
+  keys.forEach(k => {
+    const r = db.records[k];
+    sel.append(el("option", { value: k, textContent: `${k.slice(0, 10)} (${WD[wd(k.slice(0, 10))]}) · ${k.slice(11)}  (저장 ${timeStr(r.savedAt)})` }));
+  });
+}
+
+function build() {
+  document.body.classList.toggle("admin", admin);
+  $("adminBtn").hidden = admin;
+  paintTexts();
+  paintDays();
+  const host = $("sections");
+  host.innerHTML = "";
+  cfg().sections.forEach((sec, si) => {
+    if (!admin && !daySecs().includes(sec)) return;
+    const editing = admin || editSec === sec.id;
+    const card = el("section", { className: "card" + (editing && !admin ? " editing" : "") });
+    card.dataset.sid = sec.id;
+    const h2 = el("h2");
+    if (editing) {
+      h2.append(
+        el("input", { type: "text", className: "edit", value: sec.title, oninput: e => { sec.title = e.target.value; persist(); } }),
+        el("button", { className: "sm", textContent: "↑", title: "구역 위로", onclick: () => move(cfg().sections, si, -1) }),
+        el("button", { className: "sm", textContent: "↓", title: "구역 아래로", onclick: () => move(cfg().sections, si, 1) }),
+        el("button", { className: "sm del", textContent: "구역 삭제", onclick: async () => {
+          if (!await ask(`「${sec.title}」 구역과 항목 ${sec.items.length}개를 지울까요?`)) return;
+          cfg().sections.splice(si, 1); editSec = null; persist(); build();
+        } }),
+        admin ? "" : el("button", { className: "sm main", textContent: "편집 끝", onclick: () => { editSec = null; build(); } }));
+    } else {
+      h2.append(el("span", { className: "t", textContent: sec.title + dayTag(sec) }), el("small", { id: "c-" + sec.id }),
+        admin ? null : el("button", { className: "sm", textContent: "편집", title: "이 구역 항목·순서 고치기", onclick: async () => {
+          if (!await unlock()) return;
+          editSec = sec.id; build();
+        } }));
+    }
+    card.append(h2);
+
+    (editing ? sec.items : [...sec.items].sort(byStar)).forEach((it, ii) => {
+      const item = el("div", { className: "item" });
+      const row = el("div", { className: "row" });
+      if (editing) {
+        // ⠿ 손잡이를 끌어 다른 항목 위에 놓으면 그 자리로 옮김 (다른 구역으로도 가능)
+        const grip = el("span", { className: "grip", textContent: "⠿", title: "끌어서 순서 바꾸기", draggable: true });
+        grip.ondragstart = e => { dragSrc = { si, ii }; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", it.id); };
+        grip.ondragend = () => { dragSrc = null; };
+        item.ondragover = e => { if (!dragSrc) return; e.preventDefault(); item.classList.add("dropto"); };
+        item.ondragleave = () => item.classList.remove("dropto");
+        item.ondrop = e => {
+          if (!dragSrc) return;
+          e.preventDefault(); e.stopPropagation();
+          const [moved] = cfg().sections[dragSrc.si].items.splice(dragSrc.ii, 1);
+          sec.items.splice(ii, 0, moved);
+          dragSrc = null; persist(); build();
+        };
+        row.append(grip,
+          el("input", { type: "text", className: "edit", value: it.text, oninput: e => { it.text = e.target.value; persist(); } }),
+          el("button", { className: "sm", textContent: "↑", onclick: () => move(sec.items, ii, -1) }),
+          el("button", { className: "sm", textContent: "↓", onclick: () => move(sec.items, ii, 1) }),
+          el("button", { className: "sm del", textContent: "✕", title: "항목 삭제", onclick: async () => {
+            if (!await ask(`이 항목을 지울까요?\n「${it.text}」`)) return;
+            sec.items.splice(ii, 1); ["checks", "na", "notes"].forEach(k => delete cur()[k][it.id]);
+            persist(); build();
+          } }));
+        item.append(row);
+      } else {
+        const c = cur(), na = !!c.na[it.id], note = c.notes[it.id] || "";
+        const cb = el("input", { type: "checkbox", checked: !!c.checks[it.id] });
+        cb.onchange = () => {
+          if (cb.checked) { c.checks[it.id] = 1; delete c.na[it.id]; if (c.notes[it.id] === NA_TEXT) delete c.notes[it.id]; }
+          else delete c.checks[it.id];
+          touch(); build();
+        };
+        // 사유 = 이번 주 해당 없음 (다시 누르면 취소)
+        const nb = el("button", { className: "sm" + (na ? " on" : ""), textContent: na ? "해당 없음 ✓" : "사유", onclick: () => {
+          if (na) { delete c.na[it.id]; delete c.notes[it.id]; touch(); build(); return; }
+          c.na[it.id] = 1; delete c.checks[it.id];
+          if (!c.notes[it.id]) c.notes[it.id] = NA_TEXT;
+          touch(); build();
+          const inp = $("sections").querySelector(`[data-note="${it.id}"]`);
+          if (inp) { inp.focus(); inp.select(); }
+        } });
+        row.append(el("button", { className: "star" + (it.star ? " on" : ""), textContent: it.star ? "★" : "☆", title: "중요 — 오늘 꼭",
+          onclick: () => { it.star = !it.star; persist(); build(); } }), el("label", {}, cb, el("span", { textContent: it.text })));
+        if (na) row.append(el("span", { className: "chip", textContent: "해당 없음" }));
+        row.append(nb);
+        item.append(row);
+        if (na || note) {
+          const ni = el("input", { type: "text", value: note, placeholder: "사유를 적으세요" });
+          ni.dataset.note = it.id;
+          ni.oninput = () => { ni.value ? c.notes[it.id] = ni.value : delete c.notes[it.id]; touch(); };
+          item.append(el("div", { className: "note" }, ni));
+        }
+        item.classList.toggle("done", cb.checked);
+        item.classList.toggle("na", na);
+        item.classList.toggle("starred", !!it.star);
+      }
+      card.append(item);
+    });
+
+    if (editing) card.append(el("button", { className: "add", textContent: "+ 항목 추가", onclick: () => {
+      sec.items.push({ id: uid(), text: "새 항목" }); persist(); build();
+      const ins = $("sections").querySelector(`[data-sid="${sec.id}"]`).querySelectorAll("input.edit");
+      const last = ins[ins.length - 1]; last.focus(); last.select();
+    } }));
+    host.append(card);
+  });
+  paintRecords();
+  paintTasks();
+  paintAttach();
+  refresh();
+}
+
+function tally() {
+  const items = daySecs().flatMap(s => s.items), c = cur();
+  const na = items.filter(i => c.na[i.id]).length, done = items.filter(i => c.checks[i.id]).length;
+  return { total: items.length - na, done, na, left: items.length - na - done };
+}
+const tallyText = t => `완료 ${t.done} / ${t.total}` + (t.na ? ` · 해당 없음 ${t.na}` : "") + (t.left ? ` · 미확인 ${t.left}` : " · 전부 확인");
+function refresh() {
+  const c = cur();
+  cfg().sections.forEach(sec => {
+    const e = $("c-" + sec.id);
+    if (!e) return;
+    const live = sec.items.filter(i => !c.na[i.id]);
+    e.textContent = `${live.filter(i => c.checks[i.id]).length} / ${live.length}`;
+  });
+  const must = mustList().length, open = ["carry", "extra", "todo"].reduce((n, k) => n + visTasks(k).filter(t => t.done !== db.date).length, 0);
+  $("count").textContent = tallyText(tally()) + (must ? ` · ★ 남음 ${must}` : "") + (open ? ` · 남은 일 ${open}` : "");
+  showSaveState();
+}
+let fileName = "";
+function showSaveState() {
+  const c = cur(), e = $("saveState");
+  const dirty = c.editedAt > c.savedAt;
+  e.className = dirty || storeError ? "dirty" : "";
+  e.textContent = storeError ? "이 컴퓨터에 보관하지 못했습니다 — 「저장」으로 파일에 저장하세요" : c.savedAt
+    ? (dirty ? "저장 안 된 변경 있음 · " : "") + `마지막 저장 ${timeStr(c.savedAt)}` + (fileName ? ` · 파일 ${fileName}` : "")
+    : "아직 저장 안 함";
+}
+
+// 기본 정보 칸
+FIELDS.forEach(f => {
+  $(f).addEventListener("input", () => { cur().fields[f] = $(f).value; touch(); });
+});
+$("f-date").addEventListener("input", () => { if (isDate($("f-date").value)) go($("f-date").value); });
+function paintFields() {
+  FIELDS.forEach(f => { if (f !== "f-area") $(f).value = cur().fields[f] ?? ""; });
+  $("f-date").value = db.date;
+  if (!cur().fields["f-area"]) cur().fields["f-area"] = $("f-area").value;
+}
+
+// ---------- 저장 (이 컴퓨터 + 연결한 파일) ----------
+const idb = (mode, fn) => new Promise((res, rej) => {
+  const r = indexedDB.open("my-week-check", 1);
+  r.onupgradeneeded = () => r.result.createObjectStore("kv");
+  r.onerror = () => rej(r.error);
+  r.onsuccess = () => {
+    const tx = r.result.transaction("kv", mode), q = fn(tx.objectStore("kv"));
+    tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error);
+  };
+});
+const getHandle = () => idb("readonly", s => s.get("file")).catch(() => null);
+const setHandle = h => idb("readwrite", s => h ? s.put(h, "file") : s.delete("file")).catch(() => {});
+const JSON_TYPE = [{ description: "체크 기록", accept: { "application/json": [".json"] } }];
+
+async function pickFile() {
+  if (!window.showSaveFilePicker) return null;
+  try {
+    const h = await showSaveFilePicker({ suggestedName: "나의일일체크_기록.json", types: JSON_TYPE });
+    await setHandle(h); return h;
+  } catch (e) { return null; }
+}
+async function writeFile(h) {
+  if ((await h.queryPermission({ mode: "readwrite" })) !== "granted" &&
+      (await h.requestPermission({ mode: "readwrite" })) !== "granted") return false;
+  const w = await h.createWritable();
+  await w.write(new Blob([JSON.stringify(db, null, 2)], { type: "application/json" }));
+  await w.close();
+  fileName = h.name; return true;
+}
+
+$("saveBtn").onclick = async () => {
+  const left = mustList().length;
+  if (left && !await ask(`★ 표시한 일 ${left}개가 아직 남았습니다.\n그래도 저장할까요? (못 한 일은 다음 날로 넘어갑니다)`)) return;
+  carryOver(db.date);
+  const c = cur(), key = `${db.date}_${c.fields["f-area"] || ""}`;
+  c.savedAt = Date.now(); c.editedAt = Math.min(c.editedAt, c.savedAt);
+  db.records[key] = clone({ ...c, savedAt: c.savedAt });
+  persist();
+
+  let h = await getHandle();
+  if (!h && !db.noFile && window.showSaveFilePicker) {
+    if (await ask("기록을 파일로도 저장할까요?\n한 번 정해 두면 「저장」을 누를 때마다 그 파일이 최신 내용으로 바뀝니다.\n(바탕화면 등 원하는 곳을 고르세요)")) h = await pickFile();
+    else { db.noFile = true; persist(); }
+  }
+  let fileOk = true;
+  if (h) { try { fileOk = await writeFile(h); } catch (e) { fileOk = false; } }
+  build();
+  if (!fileOk) await ask("이 컴퓨터에는 저장했지만, 파일에는 쓰지 못했습니다.\n관리자 → 「저장 파일 다시 정하기」로 파일을 다시 골라 주세요.");
+};
+$("relink").onclick = async () => {
+  const h = await pickFile();
+  if (h) { db.noFile = false; persist(); try { await writeFile(h); } catch (e) {} showSaveState(); await ask(`앞으로 「${h.name}」 파일에 저장합니다.`); }
+};
+
+$("openRec").onclick = async () => {
+  const k = $("records").value;
+  if (!k) return;
+  const c = cur();
+  if (c.editedAt > c.savedAt && !await ask("저장 안 된 변경이 있습니다. 버리고 이 기록을 열까요?")) return;
+  db.date = k.slice(0, 10); db.days[db.date] = Object.assign(emptyCur(), clone(db.records[k]));
+  persist(); paintTexts(); paintFields(); build();
+};
+$("loadFile").onclick = async () => {
+  let text, h = null;
+  try {
+    if (window.showOpenFilePicker) { [h] = await showOpenFilePicker({ types: JSON_TYPE }); text = await (await h.getFile()).text(); }
+    else {
+      const inp = el("input", { type: "file", accept: ".json" });
+      text = await new Promise(r => { inp.onchange = () => inp.files[0].text().then(r); inp.click(); });
+    }
+  } catch (e) { return; }
+  let data;
+  try { data = JSON.parse(text); if (!data.cfg || !Array.isArray(data.cfg.sections)) throw 0; }
+  catch (e) { await ask("체크 기록 파일이 아닙니다."); return; }
+  if (!await ask("파일 내용으로 바꿀까요?\n(항목·제목·저장 기록이 파일 것으로 바뀝니다)")) return;
+  db = normalize(data);
+  if (h) { await setHandle(h); fileName = h.name; db.noFile = false; }
+  persist(); paintTexts(); paintFields(); build();
+};
+
+$("reset").onclick = async () => {
+  const c = cur();
+  if (c.editedAt > c.savedAt && !await ask("저장 안 된 변경이 있습니다. 저장하지 않고 이날을 비울까요?")) return;
+  if (!(c.editedAt > c.savedAt) && !await ask("이날 체크를 비울까요?\n체크·사유·메모가 비워집니다. (저장한 기록은 남습니다)")) return;
+  const keep = { "f-area": c.fields["f-area"] };
+  db.days[db.date] = Object.assign(emptyCur(), { fields: keep });
+  persist(); paintFields(); build();
+};
+
+// ---------- 관리자 (비밀번호는 실수로 바꾸지 않게 막는 용도) ----------
+$("adminBtn").onclick = async () => {
+  if (!await unlock()) return;
+  admin = true; editSec = null; build();
+};
+$("adminEnd").onclick = () => { admin = false; build(); };
+$("pinBtn").onclick = async () => {
+  const p = await ask("새 비밀번호를 입력하세요.", true);
+  if (!p) return;
+  const p2 = await ask("한 번 더 입력하세요.", true);
+  if (p !== p2) { await ask("두 번 입력한 비밀번호가 다릅니다."); return; }
+  cfg().pin = p; persist(); await ask("비밀번호를 바꿨습니다.");
+};
+$("areas").oninput = e => { cfg().areas = e.target.value.split(",").map(s => s.trim()).filter(Boolean); persist(); paintTexts(); };
+$("addSec").onclick = () => {
+  cfg().sections.push({ id: uid(), title: `${cfg().sections.length + 1}. 새 구역`, items: [{ id: uid(), text: "새 항목" }] });
+  persist(); build();
+  const cards = $("sections").querySelectorAll(".card");
+  cards[cards.length - 1].scrollIntoView({ behavior: "smooth" });
+};
+$("resetCfg").onclick = async () => {
+  if (!await ask("항목·제목을 처음 기본값으로 되돌릴까요?\n추가·수정한 내용은 사라집니다. (비밀번호·저장 기록은 유지)")) return;
+  const pin = cfg().pin; db.cfg = defaultCfg(); db.cfg.pin = pin; persist(); build();
+};
+
+// ---------- 날마다 따라오는 목록 ----------
+// db.tasks = [{ id, kind, date(적은 날), done(끝낸 날 | null), star, …칸 }]
+//   kind: carry(저장 때 체크 못 한 항목, from = 그날) · extra(추가 봉사업무) · todo(할 일) · buy(구매할 일)
+//   D 날 보임 = 적은 날 ≤ D 이고 아직 안 끝냈거나 D 이후에 끝냄 → 못 하면 다음 날로 계속 넘어감
+const KINDS = {
+  carry: [],
+  extra: [["t", "", 128, "time"], ["who", "요청자", 110], ["what", "내용 (언제까지)"]],
+  todo: [["what", "할 일"]],
+  buy: [["what", "품목"], ["qty", "수량", 80], ["note", "비고 · 금액"]],
+};
+function visTasks(kind, D = db.date) {
+  return db.tasks.filter(t => t.kind === kind && t.date <= D && (!t.done || t.done >= D))
+    .sort((a, b) => byStar(a, b) || a.date.localeCompare(b.date));
+}
+// 저장한 날(P)에 체크 못 한 항목 → 다음 날부터 「넘어온 일」. 다음 날 체크리스트에 같은 항목이 있으면 넘기지 않음(매일 하는 일)
+function carryOver(P) {
+  const c = db.days[P] || emptyCur(), next = shift(P, 1);
+  const nextTexts = new Set(cfg().sections.filter(s => s.day == null || s.day === wd(next)).flatMap(s => s.items.map(i => i.text)));
+  daySecs().forEach(sec => sec.items.forEach(it => {
+    const src = `${P}|${it.id}`, open = db.tasks.find(t => t.src === src);
+    const left = !c.checks[it.id] && !c.na[it.id] && !nextTexts.has(it.text);
+    if (left && !open) db.tasks.push({ id: uid(), kind: "carry", date: next, from: P, src, what: it.text, star: !!it.star, done: null });
+    if (!left && open && !open.done) db.tasks.splice(db.tasks.indexOf(open), 1);
+  }));
+}
+function taskRow(t, D) {
+  const done = t.done === D;
+  const cb = el("input", { type: "checkbox", checked: done, onchange: () => { t.done = cb.checked ? D : null; touch(); build(); } });
+  const fs = el("div", { className: "fs" });
+  if (t.kind === "carry") fs.append(el("span", { className: "txt", textContent: t.what }));
+  KINDS[t.kind].forEach(([k, ph, w, type]) => {
+    const i = el("input", { type: type || "text", value: t[k] || "", placeholder: ph, oninput: e => { t[k] = e.target.value; touch(); } });
+    if (w) i.style.flex = `0 0 ${w}px`;
+    fs.append(i);
+  });
+  const from = t.kind === "carry" ? `${md(t.from)} 못 한 일` : t.date < D ? `${md(t.date)}부터 이월` : "";
+  // 사유(추가 봉사업무 · 넘어온 일) — 그날에만 적힘, 이월은 그대로
+  const why = (t.reasons || {})[D], canWhy = t.kind === "extra" || t.kind === "carry";
+  const whyBtn = !canWhy ? el("span") : el("button", { className: "sm" + (why != null ? " on" : ""), textContent: why != null ? "사유 ✓" : "사유",
+    title: "못 한 이유 · 메모", onclick: () => {
+      t.reasons = t.reasons || {};
+      if (why != null) delete t.reasons[D]; else t.reasons[D] = "";
+      touch(); build();
+      const wi = document.querySelector(`[data-why="${t.id}"]`);
+      if (wi) wi.focus();
+    } });
+  const row = el("div", { className: "task" + (done ? " done" : "") + (t.star ? " starred" : "") },
+    el("button", { className: "star" + (t.star ? " on" : ""), textContent: t.star ? "★" : "☆", title: "중요 — 오늘 꼭",
+      onclick: () => { t.star = !t.star; touch(); build(); } }),
+    cb, fs, el("small", { className: "from", textContent: from }), whyBtn,
+    el("button", { className: "sm del", textContent: "✕", title: "지우기", onclick: async () => {
+      if ((t.what || t.who) && !await ask(`지울까요?\n「${t.what || t.who}」`)) return;
+      db.tasks.splice(db.tasks.indexOf(t), 1); touch(); build();
+    } }));
+  if (why != null) {
+    const wi = el("input", { type: "text", value: why, placeholder: "사유를 적으세요 (예: 급한 일이 겹쳐 내일로)", oninput: e => { t.reasons[D] = e.target.value; touch(); } });
+    wi.dataset.why = t.id;
+    row.append(el("div", { className: "why" }, wi));
+  }
+  return row;
+}
+// ★ 표시했는데 아직 안 한 것 — 체크리스트 항목 + 목록
+function mustList() {
+  const c = cur(), D = db.date, out = [];
+  daySecs().forEach(sec => sec.items.forEach(it => {
+    if (it.star && !c.checks[it.id] && !c.na[it.id]) out.push({ text: it.text, where: sec.title, check: () => { c.checks[it.id] = 1; } });
+  }));
+  Object.keys(KINDS).forEach(k => visTasks(k).forEach(t => {
+    if (t.star && t.done !== D) out.push({ text: taskText(t) || "(내용 없음)", where: cfg().texts[k], check: () => { t.done = D; } });
+  }));
+  return out;
+}
+function paintTasks() {
+  const D = db.date;
+  Object.keys(KINDS).forEach(k => {
+    const list = visTasks(k), left = list.filter(t => t.done !== D).length;
+    $(k + "List").replaceChildren(...list.map(t => taskRow(t, D)));
+    const moved = list.filter(t => t.date < D && t.done !== D).length;
+    $(k + "Count").textContent = list.length ? `남음 ${left} / ${list.length}` + (moved && k !== "carry" ? ` · 이월 ${moved}` : "") : "";
+  });
+  $("carryCard").hidden = !visTasks("carry").length;
+  const must = mustList();
+  $("mustCard").hidden = !must.length || admin;
+  $("mustCount").textContent = must.length ? `${must.length}개 남음` : "";
+  $("mustList").replaceChildren(...must.map(m => el("label", { className: "mrow" },
+    el("input", { type: "checkbox", onchange: () => { m.check(); touch(); build(); } }),
+    el("span", { textContent: m.text }), el("small", { textContent: m.where }))));
+  paintStock();
+  // 전날 「내일로 넘길 일」
+  const pv = ((db.days[shift(D, -1)] || {}).fields || {})["f-next"] || "";
+  $("prevCard").hidden = !pv.trim() || admin;
+  $("prevDate").textContent = md(shift(D, -1));
+  $("prevText").textContent = pv;
+}
+document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => {
+  const k = b.dataset.add, d = new Date();
+  db.tasks.push({ id: uid(), kind: k, date: db.date, done: null, star: false, ...(k === "extra" ? { t: `${pad(d.getHours())}:${pad(d.getMinutes())}` } : {}) });
+  touch(); build();
+  const rows = $(k + "List").querySelectorAll(".task");
+  rows[rows.length - 1].querySelector(".fs input:not([type=time])").focus();
+});
+
+// 재고 — 날짜와 상관없는 표 db.stock = [{ id, what, qty, state(넉넉 · 부족 · 없음), note }]
+const STATES = ["넉넉", "부족", "없음"];
+const isLow = s => s.state === "부족" || s.state === "없음";
+function paintStock() {
+  const list = db.stock, low = list.filter(isLow).length;
+  $("stockCount").textContent = !list.length ? "" : low ? `부족 · 없음 ${low} / ${list.length}` : `${list.length}개`;
+  $("stockList").replaceChildren(...list.map((s, i) => {
+    const inp = (k, ph, w) => {
+      const e = el("input", { type: "text", value: s[k] || "", placeholder: ph, oninput: ev => { s[k] = ev.target.value; persist(); } });
+      if (w) e.style.flex = `0 0 ${w}px`;
+      return e;
+    };
+    const sel = el("select", { onchange: e => { s.state = e.target.value; persist(); build(); } }, ...STATES.map(v => el("option", { value: v, textContent: v })));
+    sel.value = s.state || "넉넉"; sel.style.flex = "0 0 84px";
+    const inBuy = db.tasks.some(t => t.kind === "buy" && !t.done && t.what === s.what);
+    return el("div", { className: "task stock" + (isLow(s) ? " low" : "") },
+      el("div", { className: "fs" }, inp("what", "품목"), inp("qty", "수량", 80), sel, inp("note", "비고 (보관 위치 등)")),
+      isLow(s) ? el("button", { className: "sm", textContent: inBuy ? "구매 목록에 있음" : "구매에 넣기", disabled: inBuy || !s.what, onclick: () => {
+        db.tasks.push({ id: uid(), kind: "buy", date: db.date, done: null, star: false, what: s.what, qty: "", note: `재고 ${s.state}` });
+        touch(); build();
+      } }) : el("span"),
+      el("button", { className: "sm del", textContent: "✕", title: "재고에서 지우기", onclick: async () => {
+        if (s.what && !await ask(`재고에서 지울까요?\n「${s.what}」`)) return;
+        list.splice(i, 1); persist(); build();
+      } }));
+  }));
+}
+$("stockAdd").onclick = () => {
+  db.stock.push({ id: uid(), what: "", qty: "", state: "넉넉", note: "" });
+  persist(); build();
+  const r = $("stockList").querySelectorAll(".task");
+  r[r.length - 1].querySelector("input").focus();
+};
+
+// ---------- 첨부 (원본은 IndexedDB "f:<id>", 화면·기록·이미지에는 썸네일) ----------
+const fmtDur = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+function thumbFrom(src, w, h) {
+  const k = Math.min(1, 360 / w), cv = document.createElement("canvas");
+  cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+  cv.getContext("2d").drawImage(src, 0, 0, cv.width, cv.height);
+  return cv.toDataURL("image/jpeg", 0.72);
+}
+async function makeThumb(file) {
+  if (file.type.startsWith("image/")) {
+    const bm = await createImageBitmap(file);
+    return { thumb: thumbFrom(bm, bm.width, bm.height) };
+  }
+  const v = el("video", { muted: true, preload: "auto", src: URL.createObjectURL(file) });
+  try {
+    await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = rej; setTimeout(rej, 15000); });
+    v.currentTime = Math.min(1, (v.duration || 0) / 2);
+    await new Promise(res => { v.onseeked = res; setTimeout(res, 5000); });
+    return { thumb: thumbFrom(v, v.videoWidth, v.videoHeight), dur: v.duration };
+  } finally { URL.revokeObjectURL(v.src); }
+}
+async function addFiles(files) {
+  for (const f of files) {
+    if (!/^(image|video)\//.test(f.type)) continue;
+    const id = uid();
+    let meta = {};
+    try { meta = await makeThumb(f); } catch (e) {}
+    try { await idb("readwrite", s => s.put(f, "f:" + id)); } catch (e) {}
+    cur().attach.push({ id, name: f.name, type: f.type.startsWith("video/") ? "video" : "image", size: f.size, note: "", ...meta });
+    touch(); paintAttach();
+  }
+}
+async function openOriginal(a) {
+  const f = await idb("readonly", s => s.get("f:" + a.id)).catch(() => null);
+  if (!f) { await ask("원본 파일이 이 컴퓨터에 없습니다.\n(다른 컴퓨터에서 첨부했거나 기록 파일에서 불러온 경우 썸네일만 있습니다)"); return; }
+  window.open(URL.createObjectURL(f), "_blank");
+}
+function paintAttach() {
+  const g = $("attGrid"), list = cur().attach;
+  g.innerHTML = "";
+  $("attCount").textContent = list.length ? `${list.length}개` : "";
+  list.forEach((a, i) => {
+    const th = el("div", { className: "th", title: "원본 열기", onclick: () => openOriginal(a) },
+      a.thumb ? el("img", { src: a.thumb, alt: a.name }) : el("span", { className: "badge", textContent: "미리보기 없음" }),
+      a.type === "video" ? el("span", { className: "badge", textContent: "영상" + (a.dur ? " " + fmtDur(a.dur) : "") }) : null,
+      el("button", { className: "sm x", textContent: "✕", title: "첨부 삭제", onclick: async e => {
+        e.stopPropagation();
+        if (!await ask(`첨부를 지울까요?\n「${a.name}」`)) return;
+        list.splice(i, 1); touch(); paintAttach();
+        // 저장 기록이 아직 쓰는 원본은 남겨 둔다
+        if (!Object.values(db.records).some(r => (r.attach || []).some(x => x.id === a.id)))
+          idb("readwrite", s => s.delete("f:" + a.id)).catch(() => {});
+      } }));
+    const note = el("input", { type: "text", value: a.note || "", placeholder: "설명 (예: 미스바 영상)", oninput: e => { a.note = e.target.value; touch(); } });
+    g.append(el("div", { className: "att" }, th, el("div", { className: "nm", textContent: a.name }), note));
+  });
+}
+const drop = $("drop");
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); };
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => e.preventDefault());
+$("attBtn").onclick = () => $("attFile").click();
+$("attFile").onchange = e => { addFiles([...e.target.files]); e.target.value = ""; };
+
+// ---------- 이미지 ----------
+const R = '"A2Z-R","A2Z 4 Regular","Malgun Gothic",sans-serif', B = '"A2Z-B","A2Z 7 Bold","Malgun Gothic",sans-serif';
+// 띄어쓰기에서 줄을 바꾸고, 한 낱말이 칸보다 길 때만 글자 단위로 자른다
+function wrap(ctx, text, maxW) {
+  const lines = [], fits = s => ctx.measureText(s).width <= maxW;
+  for (const para of String(text).split("\n")) {
+    let line = "";
+    for (const word of para.split(" ")) {
+      const next = line ? line + " " + word : word;
+      if (fits(next)) { line = next; continue; }
+      if (line) lines.push(line);
+      line = "";
+      for (const ch of word) {
+        if (!fits(line + ch) && line) { lines.push(line); line = ch; } else line += ch;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+// A4 한 장 = 설계 단위 1240 × 1754 (2배 = 2480 × 3508 = 300dpi, 3배 = 450dpi)
+// 내용을 덩어리(block)로 만든 뒤 장 높이에 맞춰 배치한다.
+//   keep: 다음 덩어리와 같은 장에 둔다(구역 제목 + 첫 항목) · gap: 장 첫머리에서는 버리는 여백
+const GRAY = "#8a8a90";
+const PAGE = { W: 1240, H: 1754, P: 64, TOP: 64, BOT: 96, RUN: 56 };
+function paginate(blocks) {
+  const maxY = PAGE.H - PAGE.BOT, pages = [];
+  let page, y, has;
+  const newPage = () => { page = []; pages.push(page); y = pages.length === 1 ? PAGE.TOP : PAGE.TOP + PAGE.RUN; has = false; };
+  newPage();
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    let need = b.h, j = i;
+    while (blocks[j] && blocks[j].keep) { j++; while (blocks[j] && blocks[j].gap) j++; if (blocks[j]) need += blocks[j].h; }
+    if (has && y + need > maxY) newPage();
+    if (b.gap && !has) continue;
+    page.push({ b, y }); y += b.h;
+    if (!b.gap) has = true;
+  }
+  return pages;
+}
+function renderPages(blocks, S, runText) {
+  const pages = paginate(blocks);
+  return pages.map((items, pi) => {
+    const cv = document.createElement("canvas");
+    cv.width = PAGE.W * S; cv.height = PAGE.H * S;
+    const ctx = cv.getContext("2d"); ctx.scale(S, S);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, PAGE.W, PAGE.H);
+    if (pi > 0) {  // 둘째 장부터 머리말
+      ctx.font = `17px ${R}`; ctx.fillStyle = GRAY;
+      ctx.fillText(runText[0], PAGE.P, PAGE.TOP + 18);
+      ctx.textAlign = "right"; ctx.fillText(runText[1], PAGE.W - PAGE.P, PAGE.TOP + 18); ctx.textAlign = "left";
+      ctx.fillStyle = "#e2dfd8"; ctx.fillRect(PAGE.P, PAGE.TOP + 30, PAGE.W - 2 * PAGE.P, 2);
+    }
+    items.forEach(({ b, y }) => b.draw(ctx, y));
+    ctx.font = `17px ${R}`; ctx.fillStyle = GRAY; ctx.textAlign = "center";
+    ctx.fillText(`${pi + 1} / ${pages.length}`, PAGE.W / 2, PAGE.H - 48); ctx.textAlign = "left";
+    return cv;
+  });
+}
+
+function buildBlocks(imgs) {
+  const m = document.createElement("canvas").getContext("2d");
+  const P = PAGE.P, W = PAGE.W, IW = W - 2 * P, T = cfg().texts, c = cur(), t = tally(), out = [];
+  const font = (ctx, f, px) => ctx.font = `${px}px ${f}`;
+  const gap = h => out.push({ h, gap: true, draw() {} });
+  const box = (ctx, x, y) => { ctx.beginPath(); ctx.roundRect(x, y + 3, 26, 26, 5); };
+  const sectionTitle = text => out.push({ h: 70, keep: true, draw(ctx, y) {
+    ctx.fillStyle = "#e2dfd8"; ctx.fillRect(P, y, IW, 2);
+    font(ctx, B, 28); ctx.fillStyle = "#1d1d1f"; ctx.fillText(text, P, y + 50);
+  } });
+
+  // 제목 · 집계 · 기본 정보
+  font(m, B, 44);
+  const tl = wrap(m, T.title, IW);
+  out.push({ h: tl.length * 58 + 6, keep: true, draw(ctx, y) {
+    font(ctx, B, 44); ctx.fillStyle = "#1d1d1f"; tl.forEach((ln, i) => ctx.fillText(ln, P, y + 44 + i * 58));
+  } });
+  out.push({ h: 50, keep: true, draw(ctx, y) {
+    font(ctx, R, 22);
+    ctx.fillStyle = t.left ? "#c2571a" : "#2f7d4f";
+    ctx.fillText(tallyText(t).replaceAll(" · ", "  ·  "), P, y + 22);
+    ctx.fillStyle = "#6b6b70"; ctx.textAlign = "right";
+    ctx.fillText("작성 " + new Date().toLocaleString("ko-KR"), W - P, y + 22); ctx.textAlign = "left";
+  } });
+  const info = [[T.l_date, $("f-date").value], [T.l_area, $("f-area").value], [T.l_file, $("f-file").value],
+                [T.l_maker, $("f-maker").value]];
+  out.push({ h: info.length * 36 + 16, draw(ctx, y) {
+    font(ctx, R, 22);
+    info.forEach(([k, v], i) => {
+      ctx.fillStyle = "#6b6b70"; ctx.fillText(k, P, y + 22 + i * 36);
+      ctx.fillStyle = "#1d1d1f"; ctx.fillText(v || "—", P + 150, y + 22 + i * 36);
+    });
+  } });
+
+  // 글 덩어리(전날 넘긴 일 · 메모 · 내일로 넘길 일) — 길면 40줄씩 나눠 장을 넘김
+  const textBlock = (title, txt) => {
+    txt = (txt || "").trim();
+    if (!txt) return;
+    sectionTitle(title);
+    font(m, R, 23);
+    const ml = wrap(m, txt, IW);
+    for (let i = 0; i < ml.length; i += 40) {
+      const part = ml.slice(i, i + 40);
+      out.push({ h: part.length * 34 + 6, draw(ctx, y) {
+        font(ctx, R, 23); ctx.fillStyle = "#1d1d1f"; part.forEach((ln, j) => ctx.fillText(ln, P, y + 24 + j * 34));
+      } });
+    }
+    gap(14);
+  };
+  // 한 줄 항목(네모 칸 + 글) — 체크리스트 · 넘어온 일 · 목록이 같이 씀
+  const line = (text, ok, na, note, left = "미확인") => {
+    font(m, R, 23); const lines = wrap(m, text, IW - 160);
+    font(m, R, 20); const nl = note ? wrap(m, "사유: " + note, IW - 60) : [];
+    out.push({ h: lines.length * 34 + (note ? nl.length * 30 + 14 : 0) + 12, draw(ctx, y) {
+      ctx.lineWidth = 2.5;
+      if (ok) {
+        ctx.fillStyle = "#2f7d4f"; box(ctx, P, y); ctx.fill();
+        ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.moveTo(P + 6, y + 16); ctx.lineTo(P + 11, y + 22); ctx.lineTo(P + 20, y + 9); ctx.stroke();
+      } else if (na) {
+        ctx.fillStyle = "#e6e5e2"; box(ctx, P, y); ctx.fill();
+        ctx.strokeStyle = GRAY; ctx.beginPath(); ctx.moveTo(P + 7, y + 16); ctx.lineTo(P + 19, y + 16); ctx.stroke();
+      } else {
+        ctx.strokeStyle = "#c2571a"; box(ctx, P, y); ctx.stroke();
+      }
+      font(ctx, R, 23); ctx.fillStyle = ok ? "#1d1d1f" : na ? GRAY : "#c2571a";
+      lines.forEach((ln, j) => ctx.fillText(ln, P + 42, y + 24 + j * 34));
+      if (!ok) {
+        font(ctx, B, 20); ctx.textAlign = "right"; ctx.fillStyle = na ? GRAY : "#c2571a";
+        ctx.fillText(na ? "해당 없음" : left, W - P, y + 24); ctx.textAlign = "left";
+      }
+      if (note) {
+        const ny = y + lines.length * 34;
+        ctx.fillStyle = "#f4f2ee"; ctx.fillRect(P + 42, ny + 2, IW - 42, nl.length * 30 + 10);
+        font(ctx, R, 20); ctx.fillStyle = "#4a4a50"; nl.forEach((ln, j) => ctx.fillText(ln, P + 54, ny + 27 + j * 30));
+      }
+    } });
+  };
+  const D = db.date, mark = s => s ? "★ " : "", why = t => (t.reasons || {})[D] || "";
+  textBlock(`${T.prev} (${md(shift(D, -1))})`, ((db.days[shift(D, -1)] || {}).fields || {})["f-next"]);
+  const carried = visTasks("carry");
+  if (carried.length) {
+    sectionTitle(`${T.carry} (${carried.length})`);
+    carried.forEach(t => line(mark(t.star) + t.what + `  (${md(t.from)} 못 한 일)`, t.done === D, false, why(t), "남음"));
+    gap(14);
+  }
+  daySecs().forEach(sec => {
+    sectionTitle(sec.title + dayTag(sec));
+    [...sec.items].sort(byStar).forEach(it => line(mark(it.star) + it.text, !!c.checks[it.id], !!c.na[it.id], c.notes[it.id]));
+    gap(14);
+  });
+  ["extra", "todo", "buy"].forEach(k => {
+    const list = visTasks(k).filter(t => t.what || t.who);
+    if (!list.length) return;
+    sectionTitle(`${T[k]} (${list.length})`);
+    list.forEach(t => line(mark(t.star) + taskText(t) + (t.date < D ? `  (${md(t.date)}부터 이월)` : ""), t.done === D, false, why(t), "남음"));
+    gap(14);
+  });
+
+  // 재고 — 날마다 이월. 모든 칸 테두리, 머리행만 옅은 회색, 부족 · 없음 먼저
+  const low = db.stock.filter(s => s.what).sort((a, b) => isLow(b) - isLow(a)), nLow = low.filter(isLow).length;
+  if (low.length) {
+    out.push({ h: 74, keep: true, draw(ctx, y) {
+      ctx.fillStyle = "#e2dfd8"; ctx.fillRect(P, y, IW, 2);
+      font(ctx, B, 28); ctx.fillStyle = "#1d1d1f"; ctx.fillText(`${T.stock} (${low.length}` + (nLow ? ` · 부족 · 없음 ${nLow})` : ")"), P, y + 50);
+    } });
+    const cols = [["품목", 0], ["수량", 150], ["상태", 120], ["비고", 380]];
+    cols[0][1] = IW - cols.reduce((n, k) => n + k[1], 0);
+    const xs = []; cols.reduce((x, k) => (xs.push(x), x + k[1]), P);
+    const drawRow = (ctx, y, h, cells, head) => {
+      if (head) { ctx.fillStyle = "#efeeeb"; ctx.fillRect(P, y, IW, h); }
+      ctx.strokeStyle = "#6b6b70"; ctx.lineWidth = 1.2; ctx.strokeRect(P, y, IW, h);
+      xs.slice(1).forEach(x => { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + h); ctx.stroke(); });
+      font(ctx, head ? B : R, 20); ctx.fillStyle = "#1d1d1f";
+      cells.forEach((lines, k) => lines.forEach((ln, j) => ctx.fillText(ln, xs[k] + 10, y + 29 + j * 28)));
+    };
+    out.push({ h: 44, keep: true, draw(ctx, y) { drawRow(ctx, y, 44, cols.map(k => [k[0]]), true); } });
+    font(m, R, 20);
+    low.forEach(s => {
+      const cells = [s.what, s.qty || "", s.state, s.note || ""].map((v, k) => wrap(m, v, cols[k][1] - 20));
+      const h = Math.max(...cells.map(x => x.length)) * 28 + 16;
+      out.push({ h, draw(ctx, y) { drawRow(ctx, y, h, cells, false); } });
+    });
+    gap(14);
+  }
+
+  // 첨부
+  const att = c.attach || [];
+  if (att.length) {
+    out.push({ h: 74, keep: true, draw(ctx, y) {
+      ctx.fillStyle = "#e2dfd8"; ctx.fillRect(P, y, IW, 2);
+      font(ctx, B, 28); ctx.fillStyle = "#1d1d1f"; ctx.fillText(`${T.attach} (${att.length}개)`, P, y + 50);
+    } });
+    const cols = 3, g = 20, cw = (IW - g * (cols - 1)) / cols, ch = Math.round(cw * 10 / 16);
+    for (let r = 0; r < att.length; r += cols) {
+      const cells = att.slice(r, r + cols).map((a, k) => {
+        font(m, R, 17); const nmL = wrap(m, a.name, cw).slice(0, 2);
+        font(m, R, 19); const dl = a.note ? wrap(m, a.note, cw) : [];
+        return { a, k, img: imgs[r + k], nmL, dl, hh: ch + 8 + nmL.length * 24 + dl.length * 27 };
+      });
+      const rowH = Math.max(...cells.map(x => x.hh));
+      out.push({ h: rowH + g, draw(ctx, y) {
+        cells.forEach(({ a, k, img, nmL, dl }) => {
+          const x = P + k * (cw + g);
+          ctx.fillStyle = "#222"; ctx.fillRect(x, y, cw, ch);
+          if (img) {
+            const s = Math.min(cw / img.width, ch / img.height), iw = img.width * s, ih = img.height * s;
+            ctx.drawImage(img, x + (cw - iw) / 2, y + (ch - ih) / 2, iw, ih);
+          }
+          if (a.type === "video") {
+            font(ctx, B, 17); const lb = "영상" + (a.dur ? " " + fmtDur(a.dur) : "");
+            const tw = ctx.measureText(lb).width + 16;
+            ctx.fillStyle = "rgba(0,0,0,.72)"; ctx.fillRect(x + 8, y + ch - 34, tw, 26);
+            ctx.fillStyle = "#fff"; ctx.fillText(lb, x + 16, y + ch - 15);
+          }
+          let ty = y + ch + 8;
+          font(ctx, R, 17); nmL.forEach(ln => { ctx.fillStyle = "#6b6b70"; ctx.fillText(ln, x, ty + 18); ty += 24; });
+          font(ctx, R, 19); dl.forEach(ln => { ctx.fillStyle = "#1d1d1f"; ctx.fillText(ln, x, ty + 20); ty += 27; });
+        });
+      } });
+    }
+    gap(6);
+  }
+
+  textBlock(T.memo, $("f-memo").value);
+  textBlock(T.next, $("f-next").value);
+  return out;
+}
+
+async function exportPages(S) {
+  await document.fonts.load("20px A2Z-R"); await document.fonts.load("20px A2Z-B");
+  const imgs = await Promise.all(cur().attach.map(a => !a.thumb ? null :
+    new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = a.thumb; })));
+  return renderPages(buildBlocks(imgs), S, [cfg().texts.title, `${db.date} (${WD[wd(db.date)]})`]);
+}
+const baseName = () => `나의일일체크_${db.date.replaceAll("-", "")}_${WD[wd(db.date)]}`;
+
+function download(blob, name) {
+  const a = el("a", { href: URL.createObjectURL(blob), download: name });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+async function busy(btn, label, fn) {
+  const old = btn.textContent; btn.disabled = true; btn.textContent = label;
+  try { await fn(); } finally { btn.disabled = false; btn.textContent = old; }
+}
+
+// 고른 폴더 안에 base 폴더를 만들고 base_1.png … 로 쓴다. 전에 더 많은 장으로 저장했을 때 남은 뒤쪽 장(같은 이름 _N.png)만 지운다.
+async function savePagesToDir(dir, base, blobs) {
+  const sub = await dir.getDirectoryHandle(base, { create: true });
+  for (let i = 0; i < blobs.length; i++) {
+    const w = await (await sub.getFileHandle(`${base}_${i + 1}.png`, { create: true })).createWritable();
+    await w.write(blobs[i]); await w.close();
+  }
+  const stale = [];
+  for await (const [name] of sub.entries()) {
+    const mm = name.match(/^(.*)_(\d+)\.png$/);
+    if (mm && mm[1] === base && +mm[2] > blobs.length) stale.push(name);
+  }
+  for (const name of stale) await sub.removeEntry(name);
+}
+
+// 고른 폴더 안에 baseName() 폴더를 만들고 _1.png, _2.png … (A4 300dpi) 로 저장
+$("imgBtn").onclick = async () => {
+  let dir = null;
+  if (window.showDirectoryPicker) {  // 폴더 창은 누르자마자 열어야 함(시간이 지나면 브라우저가 막음)
+    try { dir = await showDirectoryPicker({ id: "check-a4", mode: "readwrite" }); }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  await busy($("imgBtn"), "이미지 만드는 중…", async () => {
+    const base = baseName(), pages = await exportPages(2);
+    const blobs = await Promise.all(pages.map(cv => new Promise(r => cv.toBlob(r, "image/png"))));
+    const names = blobs.map((_, i) => `${base}_${i + 1}.png`);
+    if (!dir) { blobs.forEach((b, i) => setTimeout(() => download(b, names[i]), i * 500)); return; }
+    await savePagesToDir(dir, base, blobs);
+    await ask(`「${dir.name} › ${base}」 폴더에\nA4 ${blobs.length}장을 저장했습니다.`);
+  });
+};
+$("pdfBtn").onclick = async () => {
+  const name = baseName() + ".pdf";
+  let h = null;
+  if (window.showSaveFilePicker) {
+    try { h = await showSaveFilePicker({ suggestedName: name, types: [{ description: "PDF 문서", accept: { "application/pdf": [".pdf"] } }] }); }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  await busy($("pdfBtn"), "PDF 만드는 중…", async () => {
+    const pages = await exportPages(3), n = pages.length, blob = await makePdf(pages);
+    if (!h) { download(blob, name); return; }
+    const w = await h.createWritable(); await w.write(blob); await w.close();
+    await ask(`「${h.name}」 (A4 ${n}쪽)을 저장했습니다.`);
+  });
+};
+
+// 장마다 그림 한 장(무손실 Flate, 450dpi)을 A4 쪽 크기로 깔아 PDF 를 만든다 (외부 라이브러리 없음)
+async function makePdf(canvases) {
+  const enc = new TextEncoder(), parts = [], offs = [];
+  let len = 0;
+  const push = x => { const b = typeof x === "string" ? enc.encode(x) : x; parts.push(b); len += b.length; };
+  const obj = (n, fn) => { offs[n] = len; push(`${n} 0 obj\n`); fn(); push("\nendobj\n"); };
+  const PW = 595.28, PHt = 841.89, n = canvases.length;
+  push("%PDF-1.4\n%âã\n");
+  obj(1, () => push("<< /Type /Catalog /Pages 2 0 R >>"));
+  obj(2, () => push(`<< /Type /Pages /Kids [${canvases.map((_, i) => `${3 + i * 3} 0 R`).join(" ")}] /Count ${n} >>`));
+  for (let i = 0; i < n; i++) {
+    const cv = canvases[i], pid = 3 + i * 3, cid = pid + 1, iid = pid + 2;
+    const px = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
+    const rgb = new Uint8Array(cv.width * cv.height * 3);
+    for (let p = 0, q = 0; p < px.length; p += 4) { rgb[q++] = px[p]; rgb[q++] = px[p + 1]; rgb[q++] = px[p + 2]; }
+    const z = new Uint8Array(await new Response(new Blob([rgb]).stream().pipeThrough(new CompressionStream("deflate"))).arrayBuffer());
+    const cs = `q ${PW} 0 0 ${PHt} 0 0 cm /Im0 Do Q`;
+    obj(pid, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PHt}] /Resources << /XObject << /Im0 ${iid} 0 R >> >> /Contents ${cid} 0 R >>`));
+    obj(cid, () => { push(`<< /Length ${cs.length} >>\nstream\n`); push(cs); push("\nendstream"); });
+    obj(iid, () => {
+      push(`<< /Type /XObject /Subtype /Image /Width ${cv.width} /Height ${cv.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${z.length} >>\nstream\n`);
+      push(z); push("\nendstream");
+    });
+    cv.width = cv.height = 0;  // 메모리 풀기
+  }
+  const xref = len, total = 3 + n * 3;
+  push(`xref\n0 ${total}\n0000000000 65535 f \n`);
+  for (let k = 1; k < total; k++) push(String(offs[k]).padStart(10, "0") + " 00000 n \n");
+  push(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(parts, { type: "application/pdf" });
+}
+
+// 자동으로 열린 창 등 다른 탭이 더 새로 저장했으면 이 탭으로 다시 읽어 옴 (낡은 탭이 최신 기록을 덮어쓰지 않게)
+async function reloadDb() {
+  if (!db) return;
+  const d = await idb("readonly", s => s.get("db")).catch(() => null);
+  if (!d || (d.at || 0) <= (db.at || 0)) return;
+  const keep = db.date; db = normalize(d); db.date = keep;
+  paintTexts(); paintFields(); build();
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) reloadDb(); });
+window.addEventListener("focus", reloadDb);
+
+(async () => {
+  let d = await idb("readonly", s => s.get("db")).catch(() => null);
+  d = d || {};
+  db = normalize(d);
+  paintTexts(); paintFields(); persist(); build();
+  const h = await getHandle();
+  if (h) { fileName = h.name; showSaveState(); }
+  document.fonts.ready.then(() => { if (!admin) build(); });
+})();
+</script>
+</body>
+</html>
