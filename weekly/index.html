@@ -97,6 +97,10 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
 .task .fs input, .task .fs select { flex:1 1 140px; min-width:0; font-size:14px; padding:6px 7px; }
 .task .txt { font-size:15px; line-height:1.45; }
 .task .from { color:var(--sub); font-size:12px; white-space:nowrap; }
+.task.k-buy .fs input:first-child { flex-basis:110px; }  /* 휴대폰에서 품목·수량 / 비고 / 금액·합계 세 줄로 */
+.task .sum { flex:0 0 auto; min-width:72px; align-self:center; text-align:right; font-family:var(--B); font-size:15px; }
+.buytotal { margin:8px 0 0; padding-top:8px; border-top:1px solid var(--line); text-align:right; font-size:15px; }
+.buytotal b { font-family:var(--B); font-size:17px; margin-left:8px; }
 .task.done .fs input, .task.done .txt { color:var(--sub); text-decoration:line-through; }
 .task.starred:not(.done) .txt, .task.starred:not(.done) .fs input { font-family:var(--B); }
 .task.stock { grid-template-columns:1fr auto auto; }
@@ -213,8 +217,9 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
 
   <section class="card">
     <h2><span class="t" data-t="buy"></span><small id="buyCount"></small></h2>
-    <p class="hint">사서 체크할 때까지 다음 날로 계속 이월됩니다.</p>
+    <p class="hint">사서 체크할 때까지 다음 날로 계속 이월됩니다. 금액은 1개 값을 적으면 합계(수량 × 금액)가 자동으로 나옵니다.</p>
     <div id="buyList"></div>
+    <p class="buytotal" id="buyTotal" hidden></p>
     <button class="add" data-add="buy">+ 구매할 일 적기</button>
   </section>
 
@@ -345,8 +350,13 @@ const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "") && !isNaN(parse(s));
 const md = s => `${+s.slice(5, 7)}/${+s.slice(8)}(${WD[wd(s)]})`;
 const byStar = (a, b) => !!b.star - !!a.star;
 // 목록 한 줄을 글로 (이미지 · 오늘 꼭 할 일)
+// 구매할 일 합계 = 수량 × 금액(1개 값). "3개", "2,000원"처럼 적어도 숫자만 읽고, 수량이 비면 1개로 본다
+const num = s => { const m = String(s || "").replace(/,/g, "").match(/\d+(\.\d+)?/); return m ? +m[0] : NaN; };
+const lineTotal = t => { const p = num(t.price), q = num(t.qty); return isNaN(p) ? 0 : Math.round(p * (isNaN(q) ? 1 : q)); };
+const won = n => n.toLocaleString("ko-KR");
 const taskText = t => t.kind === "extra" ? [t.t, t.who, t.what].filter(Boolean).join("  ")
-  : t.kind === "buy" ? [t.what, t.qty, t.note && `(${t.note})`].filter(Boolean).join("  ") : (t.what || "");
+  : t.kind === "buy" ? [t.what, t.qty, t.note && `(${t.note})`, t.price && `금액 ${t.price}`, lineTotal(t) && `합계 ${won(lineTotal(t))}원`].filter(Boolean).join("  ")
+  : (t.what || "");
 const read = k => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } };
 const defaultCfg = () => ({
   pin: "0000", texts: { ...DEFAULT_TEXTS }, areas: ["전이사"],
@@ -779,7 +789,7 @@ const KINDS = {
   carry: [],
   extra: [["t", "", 128, "time"], ["who", "요청자", 110], ["what", "내용 (언제까지)"]],
   todo: [["what", "할 일"]],
-  buy: [["what", "품목"], ["qty", "수량", 80], ["note", "비고 · 금액"]],
+  buy: [["what", "품목"], ["qty", "수량", 64], ["note", "비고"], ["price", "금액", 96]],
 };
 function visTasks(kind, D = db.date) {
   return db.tasks.filter(t => t.kind === kind && t.date <= D && (!t.done || t.done >= D))
@@ -801,12 +811,16 @@ function taskRow(t, D) {
   const cb = el("input", { type: "checkbox", checked: done, onchange: () => { t.done = cb.checked ? D : null; touch(); build(); } });
   const fs = el("div", { className: "fs" });
   if (t.kind === "carry") fs.append(el("span", { className: "txt", textContent: t.what }));
+  const sum = t.kind === "buy" ? el("span", { className: "sum" }) : null;
+  const showSum = () => { if (sum) { sum.textContent = lineTotal(t) ? won(lineTotal(t)) : ""; paintBuyTotal(); } };
   KINDS[t.kind].forEach(([k, ph, w, type]) => {
-    const i = el("input", { type: type || "text", value: t[k] || "", placeholder: ph, oninput: e => { t[k] = e.target.value; touch(); } });
+    const i = el("input", { type: type || "text", value: t[k] || "", placeholder: ph, oninput: e => { t[k] = e.target.value; touch(); showSum(); } });
     i.dataset.tf = `${t.id}:${k}`;
+    if (k === "qty" || k === "price") i.inputMode = "decimal";
     if (w) i.style.flex = `0 0 ${w}px`;
     fs.append(i);
   });
+  if (sum) { sum.title = "합계 (수량 × 금액)"; fs.append(sum); sum.textContent = lineTotal(t) ? won(lineTotal(t)) : ""; }
   const from = t.kind === "carry" ? `${md(t.from)} 못 한 일` : t.date < D ? `${md(t.date)}부터 이월` : "";
   // 사유(추가 봉사업무 · 넘어온 일) — 그날에만 적힘, 이월은 그대로
   const why = (t.reasons || {})[D], canWhy = t.kind === "extra" || t.kind === "carry";
@@ -818,7 +832,7 @@ function taskRow(t, D) {
       const wi = document.querySelector(`[data-why="${t.id}"]`);
       if (wi) wi.focus();
     } });
-  const row = el("div", { className: "task" + (done ? " done" : "") + (t.star ? " starred" : "") },
+  const row = el("div", { className: `task k-${t.kind}` + (done ? " done" : "") + (t.star ? " starred" : "") },
     el("button", { className: "star" + (t.star ? " on" : ""), textContent: t.star ? "★" : "☆", title: "중요 — 오늘 꼭",
       onclick: () => { t.star = !t.star; touch(); build(); } }),
     cb, fs, el("small", { className: "from", textContent: from }), whyBtn,
@@ -844,6 +858,12 @@ function mustList() {
   }));
   return out;
 }
+// 구매할 일 전체 합계 (이날 목록에 보이는 것 모두)
+function paintBuyTotal() {
+  const total = visTasks("buy").reduce((n, t) => n + lineTotal(t), 0);
+  $("buyTotal").hidden = !total;
+  $("buyTotal").replaceChildren("전체 합계", el("b", { textContent: `${won(total)}원` }));
+}
 function paintTasks() {
   const D = db.date;
   Object.keys(KINDS).forEach(k => {
@@ -853,6 +873,7 @@ function paintTasks() {
     $(k + "Count").textContent = list.length ? `남음 ${left} / ${list.length}` + (moved && k !== "carry" ? ` · 이월 ${moved}` : "") : "";
   });
   $("carryCard").hidden = !visTasks("carry").length;
+  paintBuyTotal();
   const must = mustList();
   $("mustCard").hidden = !must.length || admin;
   $("mustCount").textContent = must.length ? `${must.length}개 남음` : "";
@@ -1129,7 +1150,8 @@ function buildBlocks(imgs) {
   ["extra", "todo", "buy"].forEach(k => {
     const list = visTasks(k).filter(t => t.what || t.who);
     if (!list.length) return;
-    sectionTitle(`${T[k]} (${list.length})`);
+    const total = k === "buy" ? list.reduce((n, t) => n + lineTotal(t), 0) : 0;
+    sectionTitle(`${T[k]} (${list.length}${total ? ` · 전체 합계 ${won(total)}원` : ""})`);
     list.forEach(t => line(mark(t.star) + taskText(t) + (t.date < D ? `  (${md(t.date)}부터 이월)` : ""), t.done === D, false, why(t), "남음"));
     gap(14);
   });
