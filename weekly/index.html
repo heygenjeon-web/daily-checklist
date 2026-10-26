@@ -55,6 +55,15 @@ textarea { min-height:70px; resize:vertical; }
 .card.editing { border:2px solid var(--admin); background:#f6f8fc; }
 .card h2 .sm.main { font-family:var(--B); }
 .grip { flex:none; cursor:grab; color:var(--sub); font-size:18px; line-height:34px; padding:0 2px; user-select:none; }
+.weekbtn { margin:0 0 14px; background:#fff; }
+.wk-row { display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; padding:8px 0; border-top:1px solid #f0eee9; }
+.wk-row:first-of-type { border-top:0; }
+.wk-row .edit { flex:1 1 160px; }
+.wk-days { display:flex; gap:4px; flex-wrap:wrap; }
+@media (max-width:640px) { .wk-days { order:2; } }  /* 휴대폰: 이름·↑↓✕ 한 줄, 요일 한 줄 */
+.wd { width:34px; height:34px; padding:0; font-size:13px; color:var(--sub); }
+.wd.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+.wd.all { width:auto; padding:0 9px; }
 .item.dropto { box-shadow:inset 0 3px 0 var(--admin); }
 .add { margin-top:8px; color:var(--admin); border-style:dashed; width:100%; }
 .del { color:#b3261e; }
@@ -200,6 +209,8 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
   </section>
 
   <div id="sections"></div>
+  <button class="add weekbtn" id="weekBtn">요일별 항목 한번에 설정</button>
+  <div id="weekEdit"></div>
 
   <section class="card">
     <h2><span class="t" data-t="extra"></span><small id="extraCount"></small></h2>
@@ -526,7 +537,7 @@ function build() {
       h2.append(el("span", { className: "t", textContent: sec.title + dayTag(sec) }), el("small", { id: "c-" + sec.id }),
         admin ? null : el("button", { className: "sm", textContent: "편집", title: "이 구역 항목·순서 고치기", onclick: async () => {
           if (!await unlock()) return;
-          editSec = sec.id; build();
+          editSec = sec.id; weekRows = null; build();
         } }));
     }
     card.append(h2);
@@ -600,11 +611,96 @@ function build() {
     } }));
     host.append(card);
   });
+  paintWeek();
   paintRecords();
   paintTasks();
   paintAttach();
   refresh();
 }
+
+// ---------- 요일별 항목 한번에 설정 ----------
+// 여러 요일에 같은 글로 있는 항목을 한 줄로 모아, 요일 칸을 켜고 끄는 것으로 설정한다.
+// 저장은 그대로 요일 구역(sections)에 한다 — 남아 있는 항목은 id 가 그대로라 지난 체크 기록이 이어진다.
+const DAY_TITLES = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "주일"];
+let weekRows = null, weekCfg = null;  // 열려 있는 동안의 줄 목록 · 그 줄을 만든 cfg (다른 기기에서 바뀌면 다시 만든다)
+function weekRowsFrom() {
+  const rows = [], byText = new Map();
+  for (let d = 0; d < 7; d++) {
+    const sec = cfg().sections.find(s => s.day === d);
+    if (!sec) continue;
+    let prev = -1;
+    sec.items.forEach((it, j) => {
+      let r = byText.get(it.text);
+      if (!r || r.items[d]) {  // 처음 보는 글이면 새 줄 (같은 날 같은 글이 또 있으면 따로 한 줄)
+        r = { text: it.text, days: new Set(), items: {} };
+        if (!byText.has(it.text)) byText.set(it.text, r);
+        // 그날 바로 앞 항목 뒤에서, 그날과 상관없는 줄은 건너뛰고 그날 뒤 항목 앞에 넣는다 (각 요일 순서는 그대로, 요일만의 항목은 아래쪽으로)
+        const later = new Set(sec.items.slice(j + 1).map(x => x.text));
+        let pos = prev + 1;
+        while (pos < rows.length && !rows[pos].days.has(d) && !later.has(rows[pos].text)) pos++;
+        rows.splice(pos, 0, r);
+      }
+      r.days.add(d); r.items[d] = it;
+      prev = rows.indexOf(r);
+    });
+  }
+  return rows;
+}
+function writeWeek() {
+  for (let d = 0; d < 7; d++) {
+    const want = weekRows.filter(r => r.days.has(d));
+    let sec = cfg().sections.find(s => s.day === d);
+    if (!sec) {
+      if (!want.length) continue;
+      sec = { id: uid(), title: DAY_TITLES[d], day: d, items: [] };
+      const at = cfg().sections.findIndex(s => s.day != null && s.day > d);
+      cfg().sections.splice(at < 0 ? cfg().sections.length : at, 0, sec);
+    }
+    sec.items = want.map(r => r.items[d] ||= { id: uid(), text: r.text });
+  }
+  weekRows.forEach(r => { for (const d in r.items) if (!r.days.has(+d)) delete r.items[d]; });
+  persist();
+}
+function paintWeek() {
+  $("weekBtn").hidden = admin || !!weekRows;
+  const host = $("weekEdit");
+  if (!weekRows || admin) { host.replaceChildren(); return; }
+  if (weekCfg !== db.cfg) { weekRows = weekRowsFrom(); weekCfg = db.cfg; }
+  const redo = () => { writeWeek(); build(); };
+  const rows = weekRows.map((r, i) => {
+    const days = WD.map((w, d) => el("button", { className: "wd" + (r.days.has(d) ? " on" : ""), textContent: w === "주일" ? "일" : w, title: DAY_TITLES[d],
+      onclick: () => { r.days.has(d) ? r.days.delete(d) : r.days.add(d); redo(); } }));
+    const every = r.days.size === 7;
+    days.push(el("button", { className: "wd all" + (every ? " on" : ""), textContent: "매일",
+      onclick: () => { r.days = new Set(every ? [] : [0, 1, 2, 3, 4, 5, 6]); redo(); } }));
+    return el("div", { className: "wk-row" },
+      el("input", { type: "text", className: "edit", value: r.text, oninput: e => {
+        r.text = e.target.value; Object.values(r.items).forEach(it => { it.text = r.text; }); persist();
+      } }),
+      el("div", { className: "wk-days" }, ...days),
+      el("button", { className: "sm", textContent: "↑", onclick: () => { if (i) { [weekRows[i - 1], weekRows[i]] = [weekRows[i], weekRows[i - 1]]; redo(); } } }),
+      el("button", { className: "sm", textContent: "↓", onclick: () => { if (i < weekRows.length - 1) { [weekRows[i + 1], weekRows[i]] = [weekRows[i], weekRows[i + 1]]; redo(); } } }),
+      el("button", { className: "sm del", textContent: "✕", title: "항목 삭제", onclick: async () => {
+        if (!await ask(`이 항목을 모든 요일에서 지울까요?\n「${r.text}」`)) return;
+        weekRows.splice(weekRows.indexOf(r), 1); redo();
+      } }));
+  });
+  host.replaceChildren(el("section", { className: "card editing" },
+    el("h2", {}, el("span", { className: "t", textContent: "요일별 항목 한번에 설정" }),
+      el("button", { className: "sm main", textContent: "완료", onclick: () => { weekRows = null; build(); } })),
+    el("p", { className: "hint", textContent: "요일을 눌러 켜고 끕니다. 여러 요일에 있는 같은 항목은 한 줄로 모여 있어, 이름을 한 번만 고치면 모든 요일에 바뀝니다." }),
+    ...rows,
+    el("button", { className: "add", textContent: "+ 항목 추가 (처음엔 매일)", onclick: () => {
+      weekRows.push({ text: "새 항목", days: new Set([0, 1, 2, 3, 4, 5, 6]), items: {} }); redo();
+      const ins = $("weekEdit").querySelectorAll("input.edit"), last = ins[ins.length - 1];
+      last.focus(); last.select();
+    } })));
+}
+$("weekBtn").onclick = async () => {
+  if (!await unlock()) return;
+  editSec = null; weekRows = weekRowsFrom(); weekCfg = db.cfg; build();
+  $("weekEdit").scrollIntoView({ behavior: "smooth", block: "start" });
+};
 
 function tally() {
   const items = daySecs().flatMap(s => s.items), c = cur();
@@ -759,7 +855,7 @@ $("reset").onclick = async () => {
 // ---------- 관리자 (비밀번호는 실수로 바꾸지 않게 막는 용도) ----------
 $("adminBtn").onclick = async () => {
   if (!await unlock()) return;
-  admin = true; editSec = null; build();
+  admin = true; editSec = null; weekRows = null; build();
 };
 $("adminEnd").onclick = () => { admin = false; build(); };
 $("pinBtn").onclick = async () => {
