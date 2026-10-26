@@ -37,7 +37,7 @@ body.admin .adminbar { display:block; }
 .rec select { flex:1; min-width:200px; }
 .info { display:grid; grid-template-columns:110px 1fr; gap:8px 10px; align-items:center; }
 .info > span { color:var(--sub); font-size:14px; }
-input[type=text], input[type=date], input[type=password], select, textarea { font-size:15px; padding:7px 9px; border:1px solid var(--line); border-radius:0; width:100%; background:#fff; color:var(--ink); }
+input[type=text], input[type=date], input[type=password], input[type=email], select, textarea { font-size:15px; padding:7px 9px; border:1px solid var(--line); border-radius:0; width:100%; background:#fff; color:var(--ink); }
 textarea { min-height:70px; resize:vertical; }
 .item { border-top:1px solid #f0eee9; padding:6px 2px; }
 .item:first-of-type { border-top:0; }
@@ -113,6 +113,13 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
 .task .why input { font-size:14px; padding:5px 8px; background:#fbfaf7; }
 .prev { border-left:4px solid var(--admin); }
 .prevtext { margin:0; white-space:pre-wrap; font-size:15px; line-height:1.55; }
+[hidden] { display:none !important; }
+.auth { display:grid; gap:8px; max-width:420px; }
+.btns2 { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.btns2 .who { flex:1; font-size:14px; }
+.linkbtn { border:0; background:none; padding:10px 4px; color:var(--sub); text-decoration:underline; }
+.authmsg { margin:8px 0 0; font-size:13px; line-height:1.5; color:var(--warn); }
+.authmsg.ok { color:var(--ok); }
 </style>
 </head>
 <body>
@@ -147,6 +154,22 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
     <button id="adminEnd">관리 끝내기</button>
   </div>
 
+  <section class="card" id="syncCard" hidden>
+    <h2><span class="t">기기 연동</span><small id="syncState"></small></h2>
+    <p class="hint" id="syncHint"></p>
+    <form class="auth" id="authForm" novalidate hidden>
+      <input type="email" id="authEmail" placeholder="이메일" autocomplete="username" inputmode="email">
+      <input type="password" id="authPass" placeholder="비밀번호 (6자 이상)" autocomplete="current-password">
+      <div class="btns2">
+        <button type="submit" class="main">로그인</button>
+        <button type="button" id="signupBtn">새 계정 만들기</button>
+        <button type="button" class="linkbtn" id="resetBtn">비밀번호를 잊었어요</button>
+      </div>
+    </form>
+    <div class="btns2" id="authIn" hidden><span class="who" id="authWho"></span><button type="button" class="sm" id="logoutBtn">로그아웃</button></div>
+    <p class="authmsg" id="authMsg" hidden></p>
+  </section>
+
   <section class="card">
     <h2><span class="t">저장 기록</span></h2>
     <div class="rec">
@@ -160,7 +183,7 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
     <h2><span class="t" data-t="info"></span></h2>
     <div class="info">
       <span data-t="l_date"></span><input type="date" id="f-date">
-      <span data-t="l_area"></span><select id="f-area"></select>
+      <span data-t="l_area"></span><input type="text" id="f-area" list="areaList" placeholder="이름을 적으세요" autocomplete="off"><datalist id="areaList"></datalist>
       <span data-t="l_file"></span><input type="text" id="f-file" placeholder="꼭 끝낼 일 3개">
       <span data-t="l_maker"></span><input type="text" id="f-maker">
     </div>
@@ -387,9 +410,11 @@ async function unlock() {
   if (pin !== cfg().pin) { await ask("비밀번호가 맞지 않습니다."); return false; }
   return unlocked = true;
 }
-const persist = () => (db.at = Date.now(), idb("readwrite", s => s.put(db, "db")))
+const save = () => idb("readwrite", s => s.put(db, "db"))
   .then(() => { if (storeError) { storeError = false; showSaveState(); } })
   .catch(() => { storeError = true; showSaveState(); });
+// 이 기기에 보관하고, 연동 중이면 바뀐 것을 계정에도 올린다
+const persist = () => (db.at = Date.now(), queueSync(), save());
 const touch = () => { cur().editedAt = Date.now(); persist(); showSaveState(); };
 
 // 글꼴이 바뀌지 않는 브라우저 기본 창 대신 쓰는 대화상자
@@ -443,11 +468,10 @@ function paintTexts() {
     e.contentEditable = admin ? "plaintext-only" : "false";
   });
   document.title = cfg().texts.title;
-  const sel = $("f-area"), v = cur().fields["f-area"] || sel.value;
-  sel.innerHTML = "";
-  const areas = cfg().areas.length ? cfg().areas : ["전이사"];
-  [...new Set([...areas, ...(v && !areas.includes(v) ? [v] : [])])].forEach(a => sel.append(el("option", { textContent: a })));
-  if (v) sel.value = v;
+  // 이름은 직접 적는다 — 관리자 「이름 목록」과 전에 적은 이름은 고르기 목록으로
+  const names = new Set([...cfg().areas, ...Object.values(db.days).map(d => d.fields["f-area"])].filter(Boolean));
+  $("areaList").replaceChildren(...[...names].map(a => el("option", { value: a })));
+  if (document.activeElement !== $("f-area")) $("f-area").value = cur().fields["f-area"] ?? "";
   $("areas").value = cfg().areas.join(", ");
 }
 document.querySelectorAll("[data-t]").forEach(e => e.addEventListener("input", () => {
@@ -595,9 +619,9 @@ function showSaveState() {
   const c = cur(), e = $("saveState");
   const dirty = c.editedAt > c.savedAt;
   e.className = dirty || storeError ? "dirty" : "";
-  e.textContent = storeError ? "이 컴퓨터에 보관하지 못했습니다 — 「저장」으로 파일에 저장하세요" : c.savedAt
+  e.textContent = (storeError ? "이 컴퓨터에 보관하지 못했습니다 — 「저장」으로 파일에 저장하세요" : c.savedAt
     ? (dirty ? "저장 안 된 변경 있음 · " : "") + `마지막 저장 ${timeStr(c.savedAt)}` + (fileName ? ` · 파일 ${fileName}` : "")
-    : "아직 저장 안 함";
+    : "아직 저장 안 함") + (sync.uid ? ` · ${syncText()}` : "");
 }
 
 // 기본 정보 칸
@@ -606,9 +630,13 @@ FIELDS.forEach(f => {
 });
 $("f-date").addEventListener("input", () => { if (isDate($("f-date").value)) go($("f-date").value); });
 function paintFields() {
-  FIELDS.forEach(f => { if (f !== "f-area") $(f).value = cur().fields[f] ?? ""; });
+  FIELDS.forEach(f => { $(f).value = cur().fields[f] ?? ""; });
   $("f-date").value = db.date;
-  if (!cur().fields["f-area"]) cur().fields["f-area"] = $("f-area").value;
+  // 이름이 빈 날은 가장 최근 날짜에 적은 이름으로 시작 (이름을 바꾸면 그다음 날부터 새 이름)
+  if (!cur().fields["f-area"]) {
+    const last = Object.keys(db.days).sort().reverse().map(k => db.days[k].fields["f-area"]).find(Boolean);
+    $("f-area").value = cur().fields["f-area"] = last || cfg().areas[0] || "";
+  }
 }
 
 // ---------- 저장 (이 컴퓨터 + 연결한 파일) ----------
@@ -685,8 +713,16 @@ $("loadFile").onclick = async () => {
   let data;
   try { data = JSON.parse(text); if (!data.cfg || !Array.isArray(data.cfg.sections)) throw 0; }
   catch (e) { await ask("체크 기록 파일이 아닙니다."); return; }
-  if (!await ask("파일 내용으로 바꿀까요?\n(항목·제목·저장 기록이 파일 것으로 바뀝니다)")) return;
+  if (!await ask(sync.uid ? "파일 내용을 계정 기록에 합칠까요?\n(항목·제목은 파일 것으로, 같은 날짜 기록은 파일 내용으로 바뀝니다)"
+    : "파일 내용으로 바꿀까요?\n(항목·제목·저장 기록이 파일 것으로 바뀝니다)")) return;
+  const old = db;
   db = normalize(data);
+  db.sync = old.sync;
+  // 연동 중에는 파일에 없는 날짜도 지우지 않는다 (다른 기기에서 적은 기록)
+  if (sync.uid) {
+    for (const k in old.days) if (!(k in db.days)) db.days[k] = old.days[k];
+    for (const k in old.records) if (!(k in db.records)) db.records[k] = old.records[k];
+  }
   if (h) { await setHandle(h); fileName = h.name; db.noFile = false; }
   persist(); paintTexts(); paintFields(); build();
 };
@@ -696,7 +732,7 @@ $("reset").onclick = async () => {
   if (c.editedAt > c.savedAt && !await ask("저장 안 된 변경이 있습니다. 저장하지 않고 이날을 비울까요?")) return;
   if (!(c.editedAt > c.savedAt) && !await ask("이날 체크를 비울까요?\n체크·사유·메모가 비워집니다. (저장한 기록은 남습니다)")) return;
   const keep = { "f-area": c.fields["f-area"] };
-  db.days[db.date] = Object.assign(emptyCur(), { fields: keep });
+  db.days[db.date] = Object.assign(emptyCur(), { fields: keep, editedAt: Date.now() });  // 비운 것도 다른 기기에 맞춰지게
   persist(); paintFields(); build();
 };
 
@@ -1251,6 +1287,224 @@ async function makePdf(canvases) {
   return new Blob(parts, { type: "application/pdf" });
 }
 
+// ---------- 기기 연동 (Firebase: 이메일 로그인 + Firestore) ----------
+// 웹 설정값은 공개해도 되는 식별값이다. 기록은 Firestore 보안 규칙으로 본인 계정만 읽고 쓴다.
+// 일일 체크리스트 앱과 같은 프로젝트 · 같은 계정을 쓰고, 기록은 users/<uid>/weekly/<문서> 에 둔다.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBXF7KNkEu0txyq8llUvybOZnQjpYgvGgI",
+  authDomain: "my-checklist-90eda.firebaseapp.com",
+  projectId: "my-checklist-90eda",
+  storageBucket: "my-checklist-90eda.firebasestorage.app",
+  messagingSenderId: "472798184848",
+  appId: "1:472798184848:web:196b61a8a119e582e61f15",
+};
+const FB_SDK = "https://www.gstatic.com/firebasejs/10.14.1/";
+// 문서 = cfg(항목·제목) · tasks(날마다 따라오는 목록) · stock(재고) · day_<날짜> · rec_<저장 기록>
+// db.sync = { uid, h: { 문서: 마지막으로 계정과 맞춘 내용의 지문 } } — 이 기기에서 고친 것과 계정에서 바뀐 것을 가려낸다
+const sync = { loaded: false, uid: null, email: "", ready: false, offline: false, pending: false, err: "", pend: null, unsub: null, timer: 0 };
+const MAX_DOC = 900000;  // Firestore 문서 한도(1MB) 아래로 — 넘으면 사진 썸네일은 이 기기에만 둔다
+const canon = v => JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x)
+  ? Object.keys(x).sort().reduce((o, key) => (o[key] = x[key], o), {}) : x);
+function hash(s) {
+  let a = 0xdeadbeef, b = 0x41c6ce57;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a = Math.imul(a ^ c, 2654435761); b = Math.imul(b ^ c, 1597334677); }
+  a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909);
+  b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909);
+  return (b >>> 0).toString(36) + (a >>> 0).toString(36);
+}
+const sig = v => hash(canon(v));
+const H = () => (db.sync && db.sync.uid === sync.uid ? db.sync : db.sync = { uid: sync.uid, h: {} }).h;
+function shape(body) {
+  const b = clone(body);
+  if (Array.isArray(b.attach) && b.attach.length && new Blob([JSON.stringify(b)]).size > MAX_DOC) b.attach = b.attach.map(({ thumb, ...a }) => a);
+  return b;
+}
+// 지금 이 기기의 기록을 문서 단위로 — 열어 보기만 한 날(고친 적 없음)은 올리지 않는다
+function parts() {
+  const out = { cfg: db.cfg, tasks: { list: db.tasks }, stock: { list: db.stock } }, h = H();
+  for (const k in db.days) { const d = db.days[k]; if (d.editedAt || d.savedAt || ("day_" + k) in h) out["day_" + k] = d; }
+  for (const k in db.records) out["rec_" + encodeURIComponent(k)] = db.records[k];
+  return out;
+}
+const keepThumbs = (next, prev) => {
+  (next.attach || []).forEach(a => {
+    const p = !a.thumb && ((prev || {}).attach || []).find(x => x.id === a.id);
+    if (p && p.thumb) a.thumb = p.thumb;
+  });
+  return next;
+};
+function setPart(id, data) {
+  data = clone(data);
+  if (id === "cfg") { db.cfg = Object.assign(defaultCfg(), data); db.cfg.texts = { ...DEFAULT_TEXTS, ...(data.texts || {}) }; }
+  else if (id === "tasks" || id === "stock") db[id] = data.list || [];
+  else if (id.startsWith("day_")) db.days[id.slice(4)] = keepThumbs(Object.assign(emptyCur(), data), db.days[id.slice(4)]);
+  else if (id.startsWith("rec_")) { const k = decodeURIComponent(id.slice(4)); db.records[k] = keepThumbs(data, db.records[k]); }
+}
+// 같은 id 는 한쪽 것만 남기고 합친다
+const unionById = (keep, other) => { const ids = new Set(keep.map(t => t.id)); return [...keep, ...other.filter(t => !ids.has(t.id))]; };
+const repaint = () => { paintTexts(); paintFields(); build(); };
+
+// 로그인 뒤 처음 서버 기록을 받으면 이 기기 기록과 합친다
+function firstMerge(snap) {
+  const h = H(), seen = Object.keys(h).length > 0, all = parts();
+  snap.docs.forEach(d => {
+    const id = d.id, r = d.data(), rs = sig(r), l = all[id];
+    if (rs === h[id]) return;                          // 계정 쪽은 그대로 → 이 기기에서 고친 것만 올라감
+    if (l === undefined || sig(shape(l)) === h[id]) setPart(id, r);   // 이 기기는 그대로 → 계정 것을 받음
+    else if (id === "tasks" || id === "stock") {       // 양쪽 다 바뀜: 목록은 합침 (처음 연동하는 기기는 계정 것 우선)
+      const mine = db[id], theirs = r.list || [];
+      db[id] = seen ? unionById(mine, theirs) : unionById(theirs, mine);
+    } else if (id === "cfg") setPart(id, r);
+    else if (id.startsWith("day_")) { if ((r.editedAt || 0) >= (l.editedAt || 0)) setPart(id, r); }   // 같은 날은 나중에 고친 쪽
+    else if ((r.savedAt || 0) >= (l.savedAt || 0)) setPart(id, r);
+    h[id] = rs;
+  });
+  sync.ready = true;
+  save(); repaint();
+  flushSync();
+}
+// 다른 기기에서 바뀐 것을 받는다. 글을 쓰는 중이면 손을 뗀 뒤에 반영한다
+const editing = () => {
+  const a = document.activeElement;
+  return $("dlg").open || !!a && (a.isContentEditable || a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !["checkbox", "button", "file"].includes(a.type)));
+};
+function applyRemote() {
+  const snap = sync.pend;
+  if (!snap || !sync.ready || editing()) return;
+  sync.pend = null;
+  const h = H(), all = parts();
+  let changed = false;
+  snap.docs.forEach(d => {
+    const id = d.id, r = d.data(), rs = sig(r);
+    if (rs === h[id]) return;
+    if (id in all && sig(shape(all[id])) !== h[id]) return;   // 이 기기에서 고친 것이 아직 안 올라감 → 이 기기 것이 남음
+    setPart(id, r); h[id] = rs; changed = true;
+  });
+  if (changed) { save(); repaint(); }
+}
+document.addEventListener("focusout", () => setTimeout(applyRemote, 0));
+$("dlg").addEventListener("close", () => setTimeout(applyRemote, 0));
+setInterval(() => { if (sync.pend) applyRemote(); }, 2000);  // 손 뗀 신호를 놓쳤을 때를 위해
+
+function queueSync() {
+  if (!sync.ready) return;
+  clearTimeout(sync.timer);
+  sync.timer = setTimeout(flushSync, 700);
+}
+function flushSync() {
+  clearTimeout(sync.timer);
+  if (!sync.ready) return;
+  const h = H(), all = parts();
+  let wrote = false;
+  for (const id in all) {
+    const body = shape(all[id]), s = sig(body);
+    if (h[id] === s) continue;
+    h[id] = s; wrote = true;
+    sync.fs.setDoc(sync.fs.doc(sync.store, "users", sync.uid, "weekly", id), body).catch(e => {
+      sync.err = e && e.code === "permission-denied" ? "연동 권한이 없습니다 — 다시 로그인하세요" : "계정에 올리지 못했습니다 — 페이지를 다시 여세요";
+      renderSync();
+    });
+  }
+  if (wrote) save();
+}
+// 앱을 닫거나 다른 앱으로 넘어가기 전에 바로 올린다 (못 올린 것은 다음에 열 때 올라감)
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushSync(); });
+
+function startCloud(user) {
+  stopCloud();
+  Object.assign(sync, { uid: user.uid, email: user.email || "", ready: false, err: "" });
+  const col = sync.fs.collection(sync.store, "users", user.uid, "weekly");
+  sync.unsub = sync.fs.onSnapshot(col, { includeMetadataChanges: true }, snap => {
+    sync.offline = snap.metadata.fromCache;
+    sync.pending = snap.metadata.hasPendingWrites;
+    if (!sync.ready) { if (!snap.metadata.fromCache) firstMerge(snap); }
+    else { sync.pend = snap; applyRemote(); }
+    renderSync();
+  }, e => {
+    sync.err = e && e.code === "permission-denied" ? "연동 권한이 없습니다 — 다시 로그인하세요" : "연동이 끊겼습니다 — 페이지를 다시 여세요";
+    renderSync();
+  });
+  renderSync();
+}
+function stopCloud() {
+  if (sync.unsub) sync.unsub();
+  Object.assign(sync, { uid: null, email: "", ready: false, pend: null, unsub: null });
+  renderSync();
+}
+async function startSync() {
+  if (!FIREBASE_CONFIG.apiKey) return;   // 연동 설정 전에는 이 기기에만 보관
+  $("syncCard").hidden = false;
+  renderSync();
+  try {
+    const [app, auth, fs] = await Promise.all(["app", "auth", "firestore"].map(n => import(`${FB_SDK}firebase-${n}.js`)));
+    const fapp = app.initializeApp(FIREBASE_CONFIG);
+    let store;
+    try { store = fs.initializeFirestore(fapp, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }); }
+    catch (e) { store = fs.getFirestore(fapp); }
+    Object.assign(sync, { loaded: true, fs, store, a: auth, auth: auth.getAuth(fapp) });
+    auth.onAuthStateChanged(sync.auth, user => user ? startCloud(user) : stopCloud());
+  } catch (e) {
+    sync.err = "연동 프로그램을 불러오지 못했습니다 — 인터넷에 연결된 뒤 다시 여세요";
+  }
+  renderSync();
+}
+const syncText = () => !sync.ready ? "기록 맞추는 중…" : sync.offline ? "오프라인 · 연결되면 맞춰짐" : sync.pending ? "올리는 중…" : "연동됨";
+function renderSync() {
+  if (!FIREBASE_CONFIG.apiKey) return;
+  const on = !!sync.uid;
+  $("authForm").hidden = on || !sync.loaded;
+  $("authIn").hidden = !on;
+  $("authWho").textContent = on ? `${sync.email} 계정으로 연동 중` : "";
+  $("syncState").textContent = on ? syncText() : "";
+  $("syncHint").textContent = on ? "이 계정으로 로그인한 아이폰 · 아이패드 · PC에 기록이 자동으로 맞춰집니다."
+    : sync.loaded ? "아이폰 · 아이패드 · PC에서 같은 계정으로 로그인하면 기록이 자동으로 맞춰집니다. 처음이면 이메일과 비밀번호를 적고 「새 계정 만들기」를 누르세요."
+    : sync.err ? "" : "연동 준비 중…";
+  if (sync.err) authMsg(sync.err);
+  showSaveState();
+}
+function authMsg(text, ok) {
+  const e = $("authMsg");
+  e.textContent = text || ""; e.hidden = !text; e.classList.toggle("ok", !!ok);
+}
+const AUTH_ERRORS = {
+  "auth/invalid-email": "이메일 주소 형식을 확인하세요.",
+  "auth/missing-email": "이메일을 적으세요.",
+  "auth/missing-password": "비밀번호를 적으세요.",
+  "auth/weak-password": "비밀번호는 6자 이상이어야 합니다.",
+  "auth/email-already-in-use": "이미 가입된 이메일입니다. 「로그인」을 누르세요.",
+  "auth/invalid-credential": "이메일이나 비밀번호가 맞지 않습니다. 처음이면 「새 계정 만들기」를 누르세요.",
+  "auth/wrong-password": "이메일이나 비밀번호가 맞지 않습니다.",
+  "auth/user-not-found": "가입되지 않은 이메일입니다. 「새 계정 만들기」를 누르세요.",
+  "auth/too-many-requests": "시도가 너무 많았습니다. 잠시 뒤 다시 하세요.",
+  "auth/network-request-failed": "인터넷 연결을 확인하세요.",
+};
+async function authAction(kind) {
+  if (!sync.loaded) return;
+  const email = $("authEmail").value.trim(), pass = $("authPass").value;
+  sync.err = ""; authMsg("");
+  try {
+    if (kind === "reset") {
+      if (!email) return authMsg("비밀번호 재설정 메일을 받을 이메일을 먼저 적으세요.");
+      await sync.a.sendPasswordResetEmail(sync.auth, email);
+      return authMsg("비밀번호 재설정 메일을 보냈습니다. 메일함을 확인하세요.", true);
+    }
+    if (kind === "signup") await sync.a.createUserWithEmailAndPassword(sync.auth, email, pass);
+    else await sync.a.signInWithEmailAndPassword(sync.auth, email, pass);
+    $("authPass").value = "";
+    document.activeElement.blur();  // 글 쓰는 중으로 보지 않게 (다른 기기 기록이 바로 반영되도록)
+  } catch (e) {
+    authMsg(AUTH_ERRORS[e && e.code] || "로그인하지 못했습니다. 잠시 뒤 다시 하세요.");
+  }
+}
+$("authForm").onsubmit = e => { e.preventDefault(); authAction("login"); };
+$("signupBtn").onclick = () => authAction("signup");
+$("resetBtn").onclick = () => authAction("reset");
+$("logoutBtn").onclick = async () => {
+  if (!await ask("로그아웃할까요?\n이 기기에는 지금까지의 기록이 남고, 다른 기기와는 더 맞춰지지 않습니다.")) return;
+  flushSync();
+  sync.a.signOut(sync.auth);
+};
+
 // 자동으로 열린 창 등 다른 탭이 더 새로 저장했으면 이 탭으로 다시 읽어 옴 (낡은 탭이 최신 기록을 덮어쓰지 않게)
 async function reloadDb() {
   if (!db) return;
@@ -1267,6 +1521,7 @@ window.addEventListener("focus", reloadDb);
   d = d || {};
   db = normalize(d);
   paintTexts(); paintFields(); persist(); build();
+  startSync();
   const h = await getHandle();
   if (h) { fileName = h.name; showSaveState(); }
   document.fonts.ready.then(() => { if (!admin) build(); });
