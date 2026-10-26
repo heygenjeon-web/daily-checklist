@@ -630,7 +630,7 @@ FIELDS.forEach(f => {
 });
 $("f-date").addEventListener("input", () => { if (isDate($("f-date").value)) go($("f-date").value); });
 function paintFields() {
-  FIELDS.forEach(f => { $(f).value = cur().fields[f] ?? ""; });
+  FIELDS.forEach(f => { const v = cur().fields[f] ?? ""; if ($(f).value !== v) $(f).value = v; });  // 같으면 두어 커서가 튀지 않게
   $("f-date").value = db.date;
   // 이름이 빈 날은 가장 최근 날짜에 적은 이름으로 시작 (이름을 바꾸면 그다음 날부터 새 이름)
   if (!cur().fields["f-area"]) {
@@ -640,15 +640,25 @@ function paintFields() {
 }
 
 // ---------- 저장 (이 컴퓨터 + 연결한 파일) ----------
-const idb = (mode, fn) => new Promise((res, rej) => {
+// 연결은 한 번 열어 두고 같이 쓴다 (저장할 때마다 새로 열면 사파리가 느려짐)
+let idbConn = null;
+const openIdb = () => idbConn ||= new Promise((res, rej) => {
   const r = indexedDB.open("my-week-check", 1);
   r.onupgradeneeded = () => r.result.createObjectStore("kv");
-  r.onerror = () => rej(r.error);
+  r.onerror = () => { idbConn = null; rej(r.error); };
   r.onsuccess = () => {
-    const tx = r.result.transaction("kv", mode), q = fn(tx.objectStore("kv"));
-    tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error);
+    const d = r.result;
+    d.onclose = () => { idbConn = null; };
+    d.onversionchange = () => { d.close(); idbConn = null; };
+    res(d);
   };
 });
+const idb = (mode, fn) => openIdb().then(d => new Promise((res, rej) => {
+  let tx;
+  try { tx = d.transaction("kv", mode); } catch (e) { idbConn = null; throw e; }  // 끊긴 연결이면 다음에 새로 연다
+  const q = fn(tx.objectStore("kv"));
+  tx.oncomplete = () => res(q && q.result); tx.onerror = tx.onabort = () => rej(tx.error);
+}));
 const getHandle = () => idb("readonly", s => s.get("file")).catch(() => null);
 const setHandle = h => idb("readwrite", s => h ? s.put(h, "file") : s.delete("file")).catch(() => {});
 const JSON_TYPE = [{ description: "체크 기록", accept: { "application/json": [".json"] } }];
@@ -793,6 +803,7 @@ function taskRow(t, D) {
   if (t.kind === "carry") fs.append(el("span", { className: "txt", textContent: t.what }));
   KINDS[t.kind].forEach(([k, ph, w, type]) => {
     const i = el("input", { type: type || "text", value: t[k] || "", placeholder: ph, oninput: e => { t[k] = e.target.value; touch(); } });
+    i.dataset.tf = `${t.id}:${k}`;
     if (w) i.style.flex = `0 0 ${w}px`;
     fs.append(i);
   });
@@ -872,6 +883,7 @@ function paintStock() {
   $("stockList").replaceChildren(...list.map((s, i) => {
     const inp = (k, ph, w) => {
       const e = el("input", { type: "text", value: s[k] || "", placeholder: ph, oninput: ev => { s[k] = ev.target.value; persist(); } });
+      e.dataset.tf = `${s.id}:${k}`;
       if (w) e.style.flex = `0 0 ${w}px`;
       return e;
     };
@@ -1300,9 +1312,12 @@ const FIREBASE_CONFIG = {
 };
 const FB_SDK = "https://www.gstatic.com/firebasejs/10.14.1/";
 // 문서 = cfg(항목·제목) · tasks(날마다 따라오는 목록) · stock(재고) · day_<날짜> · rec_<저장 기록>
-// db.sync = { uid, h: { 문서: 마지막으로 계정과 맞춘 내용의 지문 } } — 이 기기에서 고친 것과 계정에서 바뀐 것을 가려낸다
-const sync = { loaded: false, uid: null, email: "", ready: false, offline: false, pending: false, err: "", pend: null, unsub: null, timer: 0 };
+// db.sync = { uid, v, h: { 문서: 계정에 올라간 것이 확인된 내용의 지문 }, t: { 문서: 마지막으로 바뀐 시각 } }
+//   h 로 이 기기에서 고친 것과 계정에서 바뀐 것을 가려내고, 양쪽 다 바뀌었으면 나중에 고친 쪽(날짜 기록은 editedAt)을 남긴다
+// sent = 올렸지만 아직 확인 안 된 지문 — 확인되기 전에 앱이 닫히면 다음에 열 때 다시 올라간다
+const sync = { loaded: false, uid: null, email: "", ready: false, offline: false, err: "", pend: null, unsub: null, timer: 0, sent: {}, inflight: 0, since: 0 };
 const MAX_DOC = 900000;  // Firestore 문서 한도(1MB) 아래로 — 넘으면 사진 썸네일은 이 기기에만 둔다
+const LISTS = ["cfg", "tasks", "stock"];  // 바뀐 시각(at)을 함께 올리는 문서
 const canon = v => JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x)
   ? Object.keys(x).sort().reduce((o, key) => (o[key] = x[key], o), {}) : x);
 function hash(s) {
@@ -1313,7 +1328,10 @@ function hash(s) {
   return (b >>> 0).toString(36) + (a >>> 0).toString(36);
 }
 const sig = v => hash(canon(v));
-const H = () => (db.sync && db.sync.uid === sync.uid ? db.sync : db.sync = { uid: sync.uid, h: {} }).h;
+const S = () => db.sync && db.sync.uid === sync.uid ? db.sync : db.sync = { uid: sync.uid, v: 2, h: {}, t: {} };
+const H = () => S().h, T = () => S().t ||= {};
+const bare = (id, r) => { if (!LISTS.includes(id) || !("at" in r)) return r; const { at, ...rest } = r; return rest; };
+const rsig = (id, r) => sig(bare(id, r));
 function shape(body) {
   const b = clone(body);
   if (Array.isArray(b.attach) && b.attach.length && new Blob([JSON.stringify(b)]).size > MAX_DOC) b.attach = b.attach.map(({ thumb, ...a }) => a);
@@ -1334,40 +1352,58 @@ const keepThumbs = (next, prev) => {
   return next;
 };
 function setPart(id, data) {
-  data = clone(data);
+  data = clone(bare(id, data));
   if (id === "cfg") { db.cfg = Object.assign(defaultCfg(), data); db.cfg.texts = { ...DEFAULT_TEXTS, ...(data.texts || {}) }; }
   else if (id === "tasks" || id === "stock") db[id] = data.list || [];
   else if (id.startsWith("day_")) db.days[id.slice(4)] = keepThumbs(Object.assign(emptyCur(), data), db.days[id.slice(4)]);
   else if (id.startsWith("rec_")) { const k = decodeURIComponent(id.slice(4)); db.records[k] = keepThumbs(data, db.records[k]); }
 }
-// 같은 id 는 한쪽 것만 남기고 합친다
+// 같은 id 는 앞쪽 것만 남기고 합친다
 const unionById = (keep, other) => { const ids = new Set(keep.map(t => t.id)); return [...keep, ...other.filter(t => !ids.has(t.id))]; };
-const repaint = () => { paintTexts(); paintFields(); build(); };
+// 이 기기에서 그 문서를 마지막으로 고친 시각 — 기록이 없으면(예전 판) 날짜 기록 중 가장 나중에 고친 시각으로 어림한다
+const lastEdit = () => Math.max(0, ...Object.values(db.days).map(d => Math.max(d.editedAt || 0, d.savedAt || 0)));
+const timeOf = (id, v, mine) => id.startsWith("day_") ? v.editedAt || 0 : id.startsWith("rec_") ? v.savedAt || 0
+  : mine ? T()[id] ?? lastEdit() : v.at || 0;
+// 다시 그리되, 글을 쓰던 칸이 있으면 그 칸으로 커서를 돌려놓는다
+function repaint() {
+  const a = document.activeElement, key = !a || a === document.body ? null
+    : a.id ? "#" + a.id : a.dataset.note ? `[data-note="${a.dataset.note}"]` : a.dataset.why ? `[data-why="${a.dataset.why}"]` : a.dataset.tf ? `[data-tf="${a.dataset.tf}"]` : null;
+  const pos = key && typeof a.selectionStart === "number" ? a.selectionStart : null;
+  paintTexts(); paintFields(); build();
+  const b = key && document.querySelector(key);
+  if (b && b !== document.activeElement) {
+    b.focus({ preventScroll: true });
+    if (pos != null) try { b.setSelectionRange(pos, pos); } catch (e) {}
+  }
+}
 
 // 로그인 뒤 처음 서버 기록을 받으면 이 기기 기록과 합친다
 function firstMerge(snap) {
-  const h = H(), seen = Object.keys(h).length > 0, all = parts();
+  const h = H(), old = S().v !== 2 && Object.keys(h).length > 0, all = parts();
+  // 예전 판은 올리기 전에 맞춘 것으로 적어 두어 못 올린 기록이 있을 수 있다 → 한 번은 다르면 양쪽 다 바뀐 것으로 본다
   snap.docs.forEach(d => {
-    const id = d.id, r = d.data(), rs = sig(r), l = all[id];
-    if (rs === h[id]) return;                          // 계정 쪽은 그대로 → 이 기기에서 고친 것만 올라감
-    if (l === undefined || sig(shape(l)) === h[id]) setPart(id, r);   // 이 기기는 그대로 → 계정 것을 받음
-    else if (id === "tasks" || id === "stock") {       // 양쪽 다 바뀜: 목록은 합침 (처음 연동하는 기기는 계정 것 우선)
-      const mine = db[id], theirs = r.list || [];
-      db[id] = seen ? unionById(mine, theirs) : unionById(theirs, mine);
-    } else if (id === "cfg") setPart(id, r);
-    else if (id.startsWith("day_")) { if ((r.editedAt || 0) >= (l.editedAt || 0)) setPart(id, r); }   // 같은 날은 나중에 고친 쪽
-    else if ((r.savedAt || 0) >= (l.savedAt || 0)) setPart(id, r);
+    const id = d.id, r = d.data(), rs = rsig(id, r), l = all[id], ls = l === undefined ? null : sig(shape(l));
+    if (ls === rs) { h[id] = rs; return; }
+    const theirs = old || rs !== h[id], mine = ls !== null && (old || ls !== h[id]);
+    if (!theirs) return;                                            // 계정 쪽은 그대로 → 이 기기에서 고친 것이 올라감
+    const list = id === "tasks" || id === "stock";
+    if (mine && timeOf(id, l, true) > timeOf(id, r, false)) {      // 양쪽 다 바뀌었고 이 기기 것이 나중
+      if (list) db[id] = unionById(db[id], r.list || []);
+    } else if (mine && list) db[id] = unionById(r.list || [], db[id]);   // 계정 것이 나중: 목록은 합침
+    else { setPart(id, r); if (LISTS.includes(id)) T()[id] = r.at || 0; }
     h[id] = rs;
   });
+  S().v = 2;
   sync.ready = true;
   save(); repaint();
   flushSync();
 }
-// 다른 기기에서 바뀐 것을 받는다. 글을 쓰는 중이면 손을 뗀 뒤에 반영한다
-const editing = () => {
-  const a = document.activeElement;
-  return $("dlg").open || !!a && (a.isContentEditable || a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !["checkbox", "button", "file"].includes(a.type)));
-};
+// 다른 기기에서 바뀐 것을 받는다. 글자를 치는 중(2초 안)이면 손을 뗀 뒤에 반영한다
+let lastType = 0;
+document.addEventListener("input", e => {
+  if (e.target.matches("input[type=text], input[type=email], input[type=password], textarea, [contenteditable]")) lastType = Date.now();
+}, true);
+const editing = () => $("dlg").open || Date.now() - lastType < 2000;
 function applyRemote() {
   const snap = sync.pend;
   if (!snap || !sync.ready || editing()) return;
@@ -1375,48 +1411,61 @@ function applyRemote() {
   const h = H(), all = parts();
   let changed = false;
   snap.docs.forEach(d => {
-    const id = d.id, r = d.data(), rs = sig(r);
-    if (rs === h[id]) return;
-    if (id in all && sig(shape(all[id])) !== h[id]) return;   // 이 기기에서 고친 것이 아직 안 올라감 → 이 기기 것이 남음
-    setPart(id, r); h[id] = rs; changed = true;
+    const id = d.id, r = d.data(), rs = rsig(id, r);
+    if (rs === h[id] || rs === sync.sent[id]) return;                          // 그대로이거나 이 기기가 올린 것
+    if (id in all && sig(shape(all[id])) !== (sync.sent[id] ?? h[id])) return;   // 이 기기에서 고친 것이 아직 안 올라감 → 이 기기 것이 남음
+    setPart(id, r); h[id] = rs; delete sync.sent[id];
+    if (LISTS.includes(id)) T()[id] = r.at || 0;
+    changed = true;
   });
   if (changed) { save(); repaint(); }
 }
-document.addEventListener("focusout", () => setTimeout(applyRemote, 0));
 $("dlg").addEventListener("close", () => setTimeout(applyRemote, 0));
-setInterval(() => { if (sync.pend) applyRemote(); }, 2000);  // 손 뗀 신호를 놓쳤을 때를 위해
 
+// 글자를 치는 중이면 잠깐 모았다가, 체크 · 추가 · 지우기는 바로 올린다
 function queueSync() {
   if (!sync.ready) return;
   clearTimeout(sync.timer);
-  sync.timer = setTimeout(flushSync, 700);
+  sync.timer = setTimeout(flushSync, Date.now() - lastType < 1000 ? 700 : 50);
 }
 function flushSync() {
   clearTimeout(sync.timer);
   if (!sync.ready) return;
-  const h = H(), all = parts();
-  let wrote = false;
+  const h = H(), all = parts(), uid = sync.uid;
   for (const id in all) {
     const body = shape(all[id]), s = sig(body);
-    if (h[id] === s) continue;
-    h[id] = s; wrote = true;
-    sync.fs.setDoc(sync.fs.doc(sync.store, "users", sync.uid, "weekly", id), body).catch(e => {
-      sync.err = e && e.code === "permission-denied" ? "연동 권한이 없습니다 — 다시 로그인하세요" : "계정에 올리지 못했습니다 — 페이지를 다시 여세요";
-      renderSync();
-    });
+    if ((sync.sent[id] ?? h[id]) === s) continue;
+    sync.sent[id] = s;
+    if (LISTS.includes(id)) body.at = T()[id] = Date.now();
+    if (!sync.inflight++) sync.since = Date.now();
+    sync.fs.setDoc(sync.fs.doc(sync.store, "users", uid, "weekly", id), body)
+      .then(() => { if (sync.uid === uid && sync.sent[id] === s) { H()[id] = s; delete sync.sent[id]; save(); } })
+      .catch(e => {
+        if (sync.sent[id] === s) delete sync.sent[id];
+        sync.err = e && e.code === "permission-denied" ? "연동 권한이 없습니다 — 다시 로그인하세요" : "계정에 올리지 못했습니다 — 페이지를 다시 여세요";
+      })
+      .finally(() => { sync.inflight--; renderSync(); });
   }
-  if (wrote) save();
+  renderSync();
 }
-// 앱을 닫거나 다른 앱으로 넘어가기 전에 바로 올린다 (못 올린 것은 다음에 열 때 올라감)
-document.addEventListener("visibilitychange", () => { if (document.hidden) flushSync(); });
+// 연결을 새로 맺는다 — 잠들었다 깬 기기는 끊긴 연결을 한참 붙잡고 있을 수 있어서
+function reconnect() {
+  if (!sync.store) return;
+  sync.fs.disableNetwork(sync.store).then(() => sync.fs.enableNetwork(sync.store)).catch(() => {});
+}
+// 앱을 닫거나 다른 앱으로 넘어가기 전에 바로 올리고, 다시 열면 연결부터 새로 맺는다
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushSync(); else if (sync.uid) reconnect(); });
+setInterval(() => {
+  if (sync.inflight && Date.now() - sync.since > 15000) { sync.since = Date.now(); reconnect(); }  // 15초 넘게 못 올리면 다시 연결
+  if (sync.pend) applyRemote();  // 글자 치기를 멈추면 받은 것을 반영
+}, 1000);
 
 function startCloud(user) {
   stopCloud();
-  Object.assign(sync, { uid: user.uid, email: user.email || "", ready: false, err: "" });
+  Object.assign(sync, { uid: user.uid, email: user.email || "", ready: false, err: "", sent: {} });
   const col = sync.fs.collection(sync.store, "users", user.uid, "weekly");
   sync.unsub = sync.fs.onSnapshot(col, { includeMetadataChanges: true }, snap => {
     sync.offline = snap.metadata.fromCache;
-    sync.pending = snap.metadata.hasPendingWrites;
     if (!sync.ready) { if (!snap.metadata.fromCache) firstMerge(snap); }
     else { sync.pend = snap; applyRemote(); }
     renderSync();
@@ -1438,8 +1487,9 @@ async function startSync() {
   try {
     const [app, auth, fs] = await Promise.all(["app", "auth", "firestore"].map(n => import(`${FB_SDK}firebase-${n}.js`)));
     const fapp = app.initializeApp(FIREBASE_CONFIG);
+    // Firestore 쪽 기기 저장(IndexedDB)은 쓰지 않는다 — 사파리에서 올리기가 멈추는 일이 있고, 기록은 이 페이지가 따로 보관함
     let store;
-    try { store = fs.initializeFirestore(fapp, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }); }
+    try { store = fs.initializeFirestore(fapp, { localCache: fs.memoryLocalCache() }); }
     catch (e) { store = fs.getFirestore(fapp); }
     Object.assign(sync, { loaded: true, fs, store, a: auth, auth: auth.getAuth(fapp) });
     auth.onAuthStateChanged(sync.auth, user => user ? startCloud(user) : stopCloud());
@@ -1448,7 +1498,7 @@ async function startSync() {
   }
   renderSync();
 }
-const syncText = () => !sync.ready ? "기록 맞추는 중…" : sync.offline ? "오프라인 · 연결되면 맞춰짐" : sync.pending ? "올리는 중…" : "연동됨";
+const syncText = () => !sync.ready ? "기록 맞추는 중…" : sync.offline ? "오프라인 · 연결되면 맞춰짐" : sync.inflight ? "올리는 중…" : "연동됨";
 function renderSync() {
   if (!FIREBASE_CONFIG.apiKey) return;
   const on = !!sync.uid;
