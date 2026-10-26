@@ -97,7 +97,7 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
 .task .fs input, .task .fs select { flex:1 1 140px; min-width:0; font-size:14px; padding:6px 7px; }
 .task .txt { font-size:15px; line-height:1.45; }
 .task .from { color:var(--sub); font-size:12px; white-space:nowrap; }
-.task.k-buy .fs input:first-child { flex-basis:110px; }  /* 휴대폰에서 품목·수량 / 비고 / 금액·합계 세 줄로 */
+.task.k-buy .fs input:first-child { flex-basis:110px; }  /* 휴대폰에서 품목·수량 / 금액·합계 두 줄로 */
 .task .sum { flex:0 0 auto; min-width:72px; align-self:center; text-align:right; font-family:var(--B); font-size:15px; }
 .buytotal { margin:8px 0 0; padding-top:8px; border-top:1px solid var(--line); text-align:right; font-size:15px; }
 .buytotal b { font-family:var(--B); font-size:17px; margin-left:8px; }
@@ -355,7 +355,7 @@ const num = s => { const m = String(s || "").replace(/,/g, "").match(/\d+(\.\d+)
 const lineTotal = t => { const p = num(t.price), q = num(t.qty); return isNaN(p) ? 0 : Math.round(p * (isNaN(q) ? 1 : q)); };
 const won = n => n.toLocaleString("ko-KR");
 const taskText = t => t.kind === "extra" ? [t.t, t.who, t.what].filter(Boolean).join("  ")
-  : t.kind === "buy" ? [t.what, t.qty, t.note && `(${t.note})`, t.price && `금액 ${t.price}`, lineTotal(t) && `합계 ${won(lineTotal(t))}원`].filter(Boolean).join("  ")
+  : t.kind === "buy" ? [t.what, t.qty, t.price && `금액 ${t.price}`, lineTotal(t) && `합계 ${won(lineTotal(t))}원`].filter(Boolean).join("  ")
   : (t.what || "");
 const read = k => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } };
 const defaultCfg = () => ({
@@ -789,7 +789,7 @@ const KINDS = {
   carry: [],
   extra: [["t", "", 128, "time"], ["who", "요청자", 110], ["what", "내용 (언제까지)"]],
   todo: [["what", "할 일"]],
-  buy: [["what", "품목"], ["qty", "수량", 64], ["note", "비고"], ["price", "금액", 96]],
+  buy: [["what", "품목"], ["qty", "수량", 64], ["price", "금액", 96]],
 };
 function visTasks(kind, D = db.date) {
   return db.tasks.filter(t => t.kind === kind && t.date <= D && (!t.done || t.done >= D))
