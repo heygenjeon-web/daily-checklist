@@ -6,6 +6,11 @@
 <title>나의 주간 체크리스트</title>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="apple-mobile-web-app-title" content="주간 체크">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f4f2ee">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
 @font-face { font-family: "A2Z-R"; src: local("A2Z 4 Regular"), local("A2Z4Regular"), local("A2Z-4Regular"); }
@@ -64,6 +69,23 @@ textarea { min-height:70px; resize:vertical; }
 .wd { width:34px; height:34px; padding:0; font-size:13px; color:var(--sub); }
 .wd.on { background:var(--ink); color:#fff; border-color:var(--ink); }
 .wd.all { width:auto; padding:0 9px; }
+/* 항목 시간 — 비어 있으면 「시간」이라고만 보이고, 넣으면 시간 순서로 정렬 */
+.tm { flex:none; min-width:44px; color:var(--sub); font-size:14px; font-variant-numeric:tabular-nums; padding-top:1px; }
+.tmin { position:relative; flex:none; display:flex; align-items:center; }
+.tmin input { -webkit-appearance:none; appearance:none; width:136px; min-height:36px; font-size:15px; padding:6px 8px; border:1px solid var(--line); border-radius:0; background:#fff; color:var(--ink); font-variant-numeric:tabular-nums; }
+.tmin input::-webkit-date-and-time-value { text-align:left; }
+.tmin:not(.has) input:not(:focus) { color:transparent; }
+.tmin > span { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:#a3a09a; font-size:14px; pointer-events:none; }
+.tmin.has > span, .tmin input:focus + span { display:none; }
+.tmin .x { border:0; background:none; padding:4px 6px; color:var(--sub); font-size:16px; }
+.tmin:not(.has) .x { visibility:hidden; }
+.sm:disabled { opacity:.35; cursor:default; }
+@media (max-width:640px) {  /* 휴대폰: 시간 칸은 이름 아래 줄로 */
+  .wk-row .tmin { order:1; }
+  .row.ed { flex-wrap:wrap; }
+  .row.ed .tmin { order:9; flex:0 0 100%; padding-left:30px; }
+  .row.ed .tmin > span { left:39px; }
+}
 .item.dropto { box-shadow:inset 0 3px 0 var(--admin); }
 .add { margin-top:8px; color:var(--admin); border-style:dashed; width:100%; }
 .del { color:#b3261e; }
@@ -133,6 +155,9 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
 .linkbtn { border:0; background:none; padding:10px 4px; color:var(--sub); text-decoration:underline; }
 .authmsg { margin:8px 0 0; font-size:13px; line-height:1.5; color:var(--warn); }
 .authmsg.ok { color:var(--ok); }
+.pushbox { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+.pushbox h3 { font-family:var(--B); font-size:15px; margin:0 0 6px; }
+.pushbox .hint { margin:0 0 10px; }
 </style>
 </head>
 <body>
@@ -181,6 +206,16 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
     </form>
     <div class="btns2" id="authIn" hidden><span class="who" id="authWho"></span><button type="button" class="sm" id="logoutBtn">로그아웃</button></div>
     <p class="authmsg" id="authMsg" hidden></p>
+    <div class="pushbox" id="pushBox" hidden>
+      <h3>알림</h3>
+      <p class="hint" id="pushHint"></p>
+      <div class="btns2">
+        <button type="button" class="sm main" id="pushOn">이 기기에서 알림 켜기</button>
+        <button type="button" class="sm" id="pushTest" hidden>시험 알림 보내기</button>
+        <button type="button" class="sm" id="pushOff" hidden>이 기기 알림 끄기</button>
+      </div>
+      <p class="authmsg" id="pushMsg" hidden></p>
+    </div>
   </section>
 
   <section class="card">
@@ -360,6 +395,15 @@ const monday = s => shift(s, -wd(s));
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "") && !isNaN(parse(s));
 const md = s => `${+s.slice(5, 7)}/${+s.slice(8)}(${WD[wd(s)]})`;
 const byStar = (a, b) => !!b.star - !!a.star;
+// 시간 정한 항목은 시간 순서, 시간 없는 항목은 그 아래에 정한 순서대로 (같은 시간끼리도 정한 순서대로)
+const timeKey = x => x.time || "~";
+const byTime = (a, b) => timeKey(a) < timeKey(b) ? -1 : timeKey(a) > timeKey(b) ? 1 : 0;
+const withTime = it => (it.time ? it.time + "  " : "") + it.text;
+function sortByTime(list) {  // 순서가 바뀌었으면 true
+  const before = list.slice();
+  list.sort(byTime);
+  return list.some((x, i) => x !== before[i]);
+}
 // 목록 한 줄을 글로 (이미지 · 오늘 꼭 할 일)
 // 구매할 일 합계 = 수량 × 금액(1개 값). "3개", "2,000원"처럼 적어도 숫자만 읽고, 수량이 비면 1개로 본다
 const num = s => { const m = String(s || "").replace(/,/g, "").match(/\d+(\.\d+)?/); return m ? +m[0] : NaN; };
@@ -442,7 +486,7 @@ const save = () => idb("readwrite", s => s.put(db, "db"))
   .then(() => { if (storeError) { storeError = false; showSaveState(); } })
   .catch(() => { storeError = true; showSaveState(); });
 // 이 기기에 보관하고, 연동 중이면 바뀐 것을 계정에도 올린다
-const persist = () => (db.at = Date.now(), queueSync(), save());
+const persist = () => (db.at = Date.now(), queueSync(), queuePush(), save());
 const touch = () => { cur().editedAt = Date.now(); persist(); showSaveState(); };
 
 // 글꼴이 바뀌지 않는 브라우저 기본 창 대신 쓰는 대화상자
@@ -517,7 +561,25 @@ function paintRecords() {
   });
 }
 
+// 시간 칸 — 고르는 동안은 그대로 두고, 칸에서 손을 떼면 다시 그려 시간 순서로 맞춘다
+const timeFocused = () => !!document.activeElement && document.activeElement.type === "time";
+function timeInput(value, set) {
+  const box = el("span", { className: "tmin" + (value ? " has" : "") });
+  const inp = el("input", { type: "time", value: value || "", title: "시간 — 넣으면 시간 순서로 정렬되고 그 시각에 알림" });
+  const upd = () => { box.classList.toggle("has", !!inp.value); if (inp.value !== value) { value = inp.value; set(value); } };
+  inp.oninput = inp.onchange = upd;
+  // 다른 칸이나 버튼으로 옮겨 가면 그쪽이 다시 그린다 — 아무 데도 안 갔을 때만 여기서 그림
+  inp.onblur = () => setTimeout(() => { if (!document.activeElement || document.activeElement === document.body) build(); }, 0);
+  box.append(inp, el("span", { textContent: "시간" }),
+    el("button", { type: "button", className: "x", textContent: "×", title: "시간 지우기", onclick: () => { inp.value = ""; upd(); build(); } }));
+  return box;
+}
 function build() {
+  // 시간 순서 맞추기 (시간을 고르는 중이면 다음에)
+  if (!timeFocused()) {
+    if (weekRows && weekCfg === db.cfg && !admin && sortByTime(weekRows)) writeWeek();
+    if (cfg().sections.map(s => sortByTime(s.items)).some(Boolean)) persist();
+  }
   document.body.classList.toggle("admin", admin);
   $("adminBtn").hidden = admin;
   paintTexts();
@@ -549,9 +611,11 @@ function build() {
     }
     card.append(h2);
 
-    (editing ? sec.items : [...sec.items].sort(byStar)).forEach((it, ii) => {
+    (editing ? sec.items : [...sec.items].sort((a, b) => byTime(a, b) || byStar(a, b))).forEach((it, ii) => {
       const item = el("div", { className: "item" });
-      const row = el("div", { className: "row" });
+      const row = el("div", { className: "row" + (editing ? " ed" : "") });
+      // ↑↓ 는 시간이 같은 항목끼리만 (시간이 다르면 시간 순서가 정함)
+      const same = d => !!sec.items[ii + d] && timeKey(sec.items[ii + d]) === timeKey(it);
       if (editing) {
         // ⠿ 손잡이를 끌어 다른 항목 위에 놓으면 그 자리로 옮김 (다른 구역으로도 가능)
         const grip = el("span", { className: "grip", textContent: "⠿", title: "끌어서 순서 바꾸기", draggable: true });
@@ -567,9 +631,10 @@ function build() {
           dragSrc = null; persist(); build();
         };
         row.append(grip,
+          timeInput(it.time, v => { v ? it.time = v : delete it.time; persist(); }),
           el("input", { type: "text", className: "edit", value: it.text, oninput: e => { it.text = e.target.value; persist(); } }),
-          el("button", { className: "sm", textContent: "↑", onclick: () => move(sec.items, ii, -1) }),
-          el("button", { className: "sm", textContent: "↓", onclick: () => move(sec.items, ii, 1) }),
+          el("button", { className: "sm", textContent: "↑", disabled: !same(-1), onclick: () => move(sec.items, ii, -1) }),
+          el("button", { className: "sm", textContent: "↓", disabled: !same(1), onclick: () => move(sec.items, ii, 1) }),
           el("button", { className: "sm del", textContent: "✕", title: "항목 삭제", onclick: async () => {
             if (!await ask(`이 항목을 지울까요?\n「${it.text}」`)) return;
             sec.items.splice(ii, 1); ["checks", "na", "notes"].forEach(k => delete cur()[k][it.id]);
@@ -594,7 +659,8 @@ function build() {
           if (inp) { inp.focus(); inp.select(); }
         } });
         row.append(el("button", { className: "star" + (it.star ? " on" : ""), textContent: it.star ? "★" : "☆", title: "중요 — 오늘 꼭",
-          onclick: () => { it.star = !it.star; persist(); build(); } }), el("label", {}, cb, el("span", { textContent: it.text })));
+          onclick: () => { it.star = !it.star; persist(); build(); } }),
+          el("label", {}, cb, it.time ? el("span", { className: "tm", textContent: it.time }) : null, el("span", { textContent: it.text })));
         if (na) row.append(el("span", { className: "chip", textContent: "해당 없음" }));
         row.append(nb);
         item.append(row);
@@ -630,28 +696,31 @@ function build() {
 // 저장은 그대로 요일 구역(sections)에 한다 — 남아 있는 항목은 id 가 그대로라 지난 체크 기록이 이어진다.
 const DAY_TITLES = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "주일"];
 let weekRows = null, weekCfg = null;  // 열려 있는 동안의 줄 목록 · 그 줄을 만든 cfg (다른 기기에서 바뀌면 다시 만든다)
+// 글과 시간이 같은 항목을 한 줄로 (요일마다 시간이 다르면 줄이 나뉜다)
+const rowKey = it => `${it.time || ""} ${it.text}`;
 function weekRowsFrom() {
-  const rows = [], byText = new Map();
+  const rows = [], byKey = new Map();
   for (let d = 0; d < 7; d++) {
     const sec = cfg().sections.find(s => s.day === d);
     if (!sec) continue;
     let prev = -1;
     sec.items.forEach((it, j) => {
-      let r = byText.get(it.text);
-      if (!r || r.items[d]) {  // 처음 보는 글이면 새 줄 (같은 날 같은 글이 또 있으면 따로 한 줄)
-        r = { text: it.text, days: new Set(), items: {} };
-        if (!byText.has(it.text)) byText.set(it.text, r);
+      const key = rowKey(it);
+      let r = byKey.get(key);
+      if (!r || r.items[d]) {  // 처음 보는 항목이면 새 줄 (같은 날 같은 항목이 또 있으면 따로 한 줄)
+        r = { key, text: it.text, time: it.time || "", days: new Set(), items: {} };
+        if (!byKey.has(key)) byKey.set(key, r);
         // 그날 바로 앞 항목 뒤에서, 그날과 상관없는 줄은 건너뛰고 그날 뒤 항목 앞에 넣는다 (각 요일 순서는 그대로, 요일만의 항목은 아래쪽으로)
-        const later = new Set(sec.items.slice(j + 1).map(x => x.text));
+        const later = new Set(sec.items.slice(j + 1).map(rowKey));
         let pos = prev + 1;
-        while (pos < rows.length && !rows[pos].days.has(d) && !later.has(rows[pos].text)) pos++;
+        while (pos < rows.length && !rows[pos].days.has(d) && !later.has(rows[pos].key)) pos++;
         rows.splice(pos, 0, r);
       }
       r.days.add(d); r.items[d] = it;
       prev = rows.indexOf(r);
     });
   }
-  return rows;
+  return rows.sort(byTime);
 }
 function writeWeek() {
   for (let d = 0; d < 7; d++) {
@@ -663,7 +732,7 @@ function writeWeek() {
       const at = cfg().sections.findIndex(s => s.day != null && s.day > d);
       cfg().sections.splice(at < 0 ? cfg().sections.length : at, 0, sec);
     }
-    sec.items = want.map(r => r.items[d] ||= { id: uid(), text: r.text });
+    sec.items = want.map(r => r.items[d] ||= { id: uid(), text: r.text, ...(r.time ? { time: r.time } : {}) });
   }
   weekRows.forEach(r => { for (const d in r.items) if (!r.days.has(+d)) delete r.items[d]; });
   persist();
@@ -680,13 +749,15 @@ function paintWeek() {
     const every = r.days.size === 7;
     days.push(el("button", { className: "wd all" + (every ? " on" : ""), textContent: "매일",
       onclick: () => { r.days = new Set(every ? [] : [0, 1, 2, 3, 4, 5, 6]); redo(); } }));
+    const same = d => !!weekRows[i + d] && timeKey(weekRows[i + d]) === timeKey(r);
     return el("div", { className: "wk-row" },
+      timeInput(r.time, v => { r.time = v; Object.values(r.items).forEach(it => { v ? it.time = v : delete it.time; }); persist(); }),
       el("input", { type: "text", className: "edit", value: r.text, oninput: e => {
         r.text = e.target.value; Object.values(r.items).forEach(it => { it.text = r.text; }); persist();
       } }),
       el("div", { className: "wk-days" }, ...days),
-      el("button", { className: "sm", textContent: "↑", onclick: () => { if (i) { [weekRows[i - 1], weekRows[i]] = [weekRows[i], weekRows[i - 1]]; redo(); } } }),
-      el("button", { className: "sm", textContent: "↓", onclick: () => { if (i < weekRows.length - 1) { [weekRows[i + 1], weekRows[i]] = [weekRows[i], weekRows[i + 1]]; redo(); } } }),
+      el("button", { className: "sm", textContent: "↑", disabled: !same(-1), onclick: () => { [weekRows[i - 1], weekRows[i]] = [weekRows[i], weekRows[i - 1]]; redo(); } }),
+      el("button", { className: "sm", textContent: "↓", disabled: !same(1), onclick: () => { [weekRows[i + 1], weekRows[i]] = [weekRows[i], weekRows[i + 1]]; redo(); } }),
       el("button", { className: "sm del", textContent: "✕", title: "항목 삭제", onclick: async () => {
         if (!await ask(`이 항목을 모든 요일에서 지울까요?\n「${r.text}」`)) return;
         weekRows.splice(weekRows.indexOf(r), 1); redo();
@@ -695,7 +766,7 @@ function paintWeek() {
   host.replaceChildren(el("section", { className: "card editing" },
     el("h2", {}, el("span", { className: "t", textContent: "요일별 항목 한번에 설정" }),
       el("button", { className: "sm main", textContent: "완료", onclick: () => { weekRows = null; build(); } })),
-    el("p", { className: "hint", textContent: "요일을 눌러 켜고 끕니다. 여러 요일에 있는 같은 항목은 한 줄로 모여 있어, 이름을 한 번만 고치면 모든 요일에 바뀝니다." }),
+    el("p", { className: "hint", textContent: "요일을 눌러 켜고 끕니다. 같은 항목은 한 줄로 모여 있어, 이름을 한 번만 고치면 모든 요일에 바뀝니다. 시간을 넣으면 시간 순서로 저절로 정렬되고(시간 없는 항목은 아래), 알림을 켠 기기에는 그 시각에 알림이 갑니다. 요일마다 시간이 다르면 줄을 하나 더 만들어 그 요일만 켜세요." }),
     ...rows,
     el("button", { className: "add", textContent: "+ 항목 추가 (처음엔 매일)", onclick: () => {
       weekRows.push({ text: "새 항목", days: new Set([0, 1, 2, 3, 4, 5, 6]), items: {} }); redo();
@@ -955,7 +1026,7 @@ function taskRow(t, D) {
 function mustList() {
   const c = cur(), D = db.date, out = [];
   daySecs().forEach(sec => sec.items.forEach(it => {
-    if (it.star && !c.checks[it.id] && !c.na[it.id]) out.push({ text: it.text, where: sec.title, check: () => { c.checks[it.id] = 1; } });
+    if (it.star && !c.checks[it.id] && !c.na[it.id]) out.push({ text: withTime(it), where: sec.title, check: () => { c.checks[it.id] = 1; } });
   }));
   Object.keys(KINDS).forEach(k => visTasks(k).forEach(t => {
     if (t.star && t.done !== D) out.push({ text: taskText(t) || "(내용 없음)", where: cfg().texts[k], check: () => { t.done = D; } });
@@ -1248,7 +1319,7 @@ function buildBlocks(imgs) {
   }
   daySecs().forEach(sec => {
     sectionTitle(sec.title + dayTag(sec));
-    [...sec.items].sort(byStar).forEach(it => line(mark(it.star) + it.text, !!c.checks[it.id], !!c.na[it.id], c.notes[it.id]));
+    [...sec.items].sort((a, b) => byTime(a, b) || byStar(a, b)).forEach(it => line(mark(it.star) + withTime(it), !!c.checks[it.id], !!c.na[it.id], c.notes[it.id]));
     gap(14);
   });
   ["extra", "todo", "buy"].forEach(k => {
@@ -1342,6 +1413,18 @@ function download(blob, name) {
   const a = el("a", { href: URL.createObjectURL(blob), download: name });
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+const isIPad = () => /iPad/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isIOS = () => isIPad() || /iPhone|iPod/.test(navigator.userAgent);
+const standalone = () => navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+// 홈 화면 앱(아이폰 · 아이패드)은 내려받기가 잘 안 돼서 공유 창으로 저장한다 — 창은 누른 직후에만 열려서 「확인」을 한 번 받는다
+async function shareFiles(blobs, names, type) {
+  const files = blobs.map((b, i) => new File([b], names[i], { type }));
+  if (!isIOS() || !standalone() || !navigator.canShare || !navigator.canShare({ files })) return false;
+  if (await ask(`파일 ${files.length}개가 준비됐습니다.\n「확인」을 누른 뒤 「이미지 저장」이나 「파일에 저장」을 고르세요.`)) {
+    try { await navigator.share({ files }); } catch (e) {}
+  }
+  return true;
+}
 async function busy(btn, label, fn) {
   const old = btn.textContent; btn.disabled = true; btn.textContent = label;
   try { await fn(); } finally { btn.disabled = false; btn.textContent = old; }
@@ -1373,7 +1456,10 @@ $("imgBtn").onclick = async () => {
     const base = baseName(), pages = await exportPages(2);
     const blobs = await Promise.all(pages.map(cv => new Promise(r => cv.toBlob(r, "image/png"))));
     const names = blobs.map((_, i) => `${base}_${i + 1}.png`);
-    if (!dir) { blobs.forEach((b, i) => setTimeout(() => download(b, names[i]), i * 500)); return; }
+    if (!dir) {
+      if (await shareFiles(blobs, names, "image/png")) return;
+      blobs.forEach((b, i) => setTimeout(() => download(b, names[i]), i * 500)); return;
+    }
     await savePagesToDir(dir, base, blobs);
     await ask(`「${dir.name} › ${base}」 폴더에\nA4 ${blobs.length}장을 저장했습니다.`);
   });
@@ -1387,7 +1473,7 @@ $("pdfBtn").onclick = async () => {
   }
   await busy($("pdfBtn"), "PDF 만드는 중…", async () => {
     const pages = await exportPages(3), n = pages.length, blob = await makePdf(pages);
-    if (!h) { download(blob, name); return; }
+    if (!h) { if (!await shareFiles([blob], [name], "application/pdf")) download(blob, name); return; }
     const w = await h.createWritable(); await w.write(blob); await w.close();
     await ask(`「${h.name}」 (A4 ${n}쪽)을 저장했습니다.`);
   });
@@ -1523,6 +1609,7 @@ function firstMerge(snap) {
   sync.ready = true;
   save(); repaint();
   flushSync();
+  pushAfterLogin();
 }
 // 다른 기기에서 바뀐 것을 받는다. 글자를 치는 중(2초 안)이면 손을 뗀 뒤에 반영한다
 let lastType = 0;
@@ -1544,7 +1631,7 @@ function applyRemote() {
     if (LISTS.includes(id)) T()[id] = r.at || 0;
     changed = true;
   });
-  if (changed) { save(); repaint(); }
+  if (changed) { save(); repaint(); queuePush(); }
 }
 $("dlg").addEventListener("close", () => setTimeout(applyRemote, 0));
 
@@ -1636,6 +1723,7 @@ function renderSync() {
     : sync.loaded ? "아이폰 · 아이패드 · PC에서 같은 계정으로 로그인하면 기록이 자동으로 맞춰집니다. 처음이면 이메일과 비밀번호를 적고 「새 계정 만들기」를 누르세요."
     : sync.err ? "" : "연동 준비 중…";
   if (sync.err) authMsg(sync.err);
+  renderPush();
   showSaveState();
 }
 function authMsg(text, ok) {
@@ -1676,10 +1764,103 @@ $("authForm").onsubmit = e => { e.preventDefault(); authAction("login"); };
 $("signupBtn").onclick = () => authAction("signup");
 $("resetBtn").onclick = () => authAction("reset");
 $("logoutBtn").onclick = async () => {
-  if (!await ask("로그아웃할까요?\n이 기기에는 지금까지의 기록이 남고, 다른 기기와는 더 맞춰지지 않습니다.")) return;
+  if (!await ask("로그아웃할까요?\n이 기기에는 지금까지의 기록이 남고, 다른 기기와는 더 맞춰지지 않습니다." + (push.sub ? "\n이 기기 알림도 꺼집니다." : ""))) return;
   flushSync();
+  await pushOff().catch(() => {});
   sync.a.signOut(sync.auth);
 };
+
+// ---------- 알림 (Cloudflare Workers 알림 서버 · 웹 푸시) ----------
+// 시간 정한 항목과 오늘 끝낸 항목을 알림 서버에 보내 두면, 그 시각에 아직 안 한 항목을 알림 켠 기기로 알려 준다.
+// 아이폰 · 아이패드(iOS 16.4 이상)는 홈 화면에 추가한 앱에서만 켤 수 있다. 서버 코드는 저장소의 push-worker/
+const PUSH_URL = "";
+const VAPID_PUBLIC = "BHRIaS8vvbCoapXi_zv7hAFeN40ZzlFbsmaHfPqnWkMU9EQCEAcKXPXk66w-oQ2BB5Z_7D4wfJeBRn5WtHSLqxk";
+const push = { reg: null, sub: null, sent: "", timer: 0, msg: "", ok: false };
+const canPush = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const devName = () => isIPad() ? "iPad" : /iPhone|iPod/.test(navigator.userAgent) ? "iPhone" : /Android/.test(navigator.userAgent) ? "Android" : "PC";
+const keyBytes = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(s.length / 4) * 4, "=")), c => c.charCodeAt(0));
+// 보낼 것: 시간 정한 항목(요일 · 시각 · 글)과 오늘 체크했거나 해당 없는 항목
+function pushSched() {
+  const items = [];
+  cfg().sections.forEach(sec => sec.items.forEach(it => { if (it.time) items.push({ id: it.id, d: sec.day ?? null, t: it.time, x: it.text }); }));
+  const c = db.days[today()] || emptyCur();
+  return { tz: new Date().getTimezoneOffset(), items, done: { date: today(), ids: [...Object.keys(c.checks), ...Object.keys(c.na)] } };
+}
+async function pushCall(path, extra = {}) {
+  const token = await sync.auth.currentUser.getIdToken();
+  const r = await fetch(PUSH_URL + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, sched: pushSched(), ...extra }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `알림 서버 오류 ${r.status}`);
+  return j;
+}
+// 항목 · 시간 · 체크가 바뀌면 2초 모아서 보낸다 (같은 내용이면 안 보냄) — 알림을 안 켠 PC에서 고쳐도 알림 켠 기기에 맞게
+function queuePush() {
+  if (!PUSH_URL || !sync.uid || !sync.ready) return;
+  clearTimeout(push.timer);
+  push.timer = setTimeout(async () => {
+    const s = sync.uid + sig(pushSched());
+    if (s === push.sent) return;
+    try { await pushCall("/sched"); push.sent = s; } catch (e) {}
+  }, 2000);
+}
+// 로그인해서 기록을 맞춘 뒤 — 이 기기가 알림을 켜 둔 상태면 이 계정으로 다시 등록(바뀐 것 없으면 서버는 그대로)
+function pushAfterLogin() {
+  if (!PUSH_URL) return;
+  if (push.sub) pushCall("/sub", { sub: push.sub.toJSON(), dev: devName() }).then(() => { push.sent = sync.uid + sig(pushSched()); }).catch(() => {});
+  else queuePush();
+}
+async function pushOff() {
+  if (!push.sub) return;
+  const sub = push.sub;
+  push.sub = null;
+  try { await pushCall("/unsub", { endpoint: sub.endpoint }); } finally { await sub.unsubscribe().catch(() => {}); renderPush(); }
+}
+function pushMsg(text, ok) {
+  push.msg = text || "";
+  const e = $("pushMsg");
+  e.textContent = push.msg; e.hidden = !push.msg; e.classList.toggle("ok", !!ok);
+}
+function renderPush() {
+  const box = $("pushBox");
+  box.hidden = !PUSH_URL || !sync.uid;
+  if (box.hidden) return;
+  const perm = canPush() ? Notification.permission : "";
+  $("pushHint").textContent = !canPush() ? (isIOS() && !standalone()
+      ? "아이폰 · 아이패드는 홈 화면 앱에서 알림을 켤 수 있어요. Safari 아래 공유 버튼(□↑) → 「홈 화면에 추가」로 만든 「주간 체크」 아이콘으로 열고, 로그인한 뒤 여기서 켜세요. (iOS 16.4 이상)"
+      : "이 브라우저는 알림을 지원하지 않습니다.")
+    : perm === "denied" ? (isIOS() ? "알림이 막혀 있어요. 설정 › 알림 › 「주간 체크」에서 알림 허용을 켠 뒤 다시 여세요." : "알림이 막혀 있어요. 주소창 왼쪽 아이콘 › 알림 › 허용으로 바꾼 뒤 다시 여세요.")
+    : push.sub ? "이 기기로 알림을 받아요. 시간을 넣은 항목을 그 시각까지 체크하지 않았으면 알려 드려요."
+    : "시간을 넣은 항목을 그 시각까지 체크하지 않았으면 이 기기로 알려 드려요. 시간은 「요일별 항목 한번에 설정」이나 요일 「편집」에서 넣어요.";
+  $("pushOn").hidden = !canPush() || perm === "denied" || !!push.sub;
+  $("pushTest").hidden = $("pushOff").hidden = !push.sub;
+}
+$("pushOn").onclick = () => busy($("pushOn"), "켜는 중…", async () => {
+  pushMsg("");
+  try {
+    // 허용 창은 누르자마자 띄워야 한다 (아이폰)
+    if (await Notification.requestPermission() !== "granted") { pushMsg("알림을 허용해야 받을 수 있어요."); return; }
+    push.reg = push.reg || await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    const sub = await push.reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC) });
+    await pushCall("/sub", { sub: sub.toJSON(), dev: devName() });
+    push.sub = sub; push.sent = sync.uid + sig(pushSched());
+    pushMsg("알림을 켰어요. 「시험 알림 보내기」로 확인해 보세요.", true);
+  } catch (e) { pushMsg("알림을 켜지 못했어요 — " + (e.message || e)); }
+  finally { renderPush(); }
+});
+$("pushTest").onclick = () => busy($("pushTest"), "보내는 중…", async () => {
+  try { await pushCall("/test", { endpoint: push.sub.endpoint }); pushMsg("시험 알림을 보냈어요. 몇 초 안에 와요.", true); }
+  catch (e) { pushMsg(e.message || String(e)); }
+});
+$("pushOff").onclick = () => busy($("pushOff"), "끄는 중…", async () => {
+  try { await pushOff(); pushMsg("이 기기 알림을 껐어요.", true); } catch (e) { pushMsg("알림 서버에 알리지 못했어요 — " + (e.message || e)); }
+});
+async function initPush() {
+  if (PUSH_URL && canPush()) {
+    try { push.reg = await navigator.serviceWorker.register("sw.js"); push.sub = await push.reg.pushManager.getSubscription(); } catch (e) {}
+  }
+  renderPush();
+}
 
 // 자동으로 열린 창 등 다른 탭이 더 새로 저장했으면 이 탭으로 다시 읽어 옴 (낡은 탭이 최신 기록을 덮어쓰지 않게)
 async function reloadDb() {
@@ -1698,6 +1879,7 @@ window.addEventListener("focus", reloadDb);
   db = normalize(d);
   paintTexts(); paintFields(); persist(); build();
   startSync();
+  initPush();
   const h = await getHandle();
   if (h) { fileName = h.name; showSaveState(); }
   document.fonts.ready.then(() => { if (!admin) build(); });
