@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>나의 일일 체크리스트</title>
+<title>나의 주간 체크리스트</title>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="apple-mobile-web-app-title" content="주간 체크">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -159,7 +159,7 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
 
   <div class="adminbar">
     <p>관리자 모드 — 점선 친 제목·안내문·칸 이름은 눌러서 바로 고칩니다. 항목은 ↑↓ 순서, ✕ 삭제, 「+ 항목 추가」로 넣습니다.</p>
-    <label>이름 목록 <input type="text" id="areas" placeholder="전이사"></label>
+    <label>이름 목록 <input type="text" id="areas" placeholder="예: 홍길동, 김철수"></label>
     <button id="addSec">+ 구역 추가</button>
     <button id="resetCfg">기본 항목으로 되돌리기</button>
     <button id="relink">저장 파일 다시 정하기</button>
@@ -328,7 +328,7 @@ const DEFAULT = [
   ], 6],
 ];
 const DEFAULT_TEXTS = {
-  title: "나의 일일 체크리스트",
+  title: "나의 주간 체크리스트",
   lead: "열면 오늘 요일이 나옵니다. ☆를 누르면 ★ 중요 표시가 되어 맨 위 「오늘 꼭 할 일」에 올라갑니다. 「저장」하면 체크 못 한 항목은 다음 날로 넘어가고, 추가 봉사업무 · 할 일 · 구매할 일은 끝낼 때까지 날마다 따라옵니다. 항목을 고칠 때는 요일 옆 「편집」(처음 비밀번호 0000).",
   info: "기본 정보", memo: "메모 (오늘 내용)", attach: "사진 · 자료",
   l_date: "날짜", l_area: "이름", l_file: "오늘 목표", l_maker: "중요 일정",
@@ -370,7 +370,7 @@ const taskText = t => t.kind === "extra" ? [t.t, t.who, t.what].filter(Boolean).
   : (t.what || "");
 const read = k => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } };
 const defaultCfg = () => ({
-  pin: "0000", texts: { ...DEFAULT_TEXTS }, areas: ["전이사"],
+  pin: "0000", texts: { ...DEFAULT_TEXTS }, areas: [],
   sections: DEFAULT.map(([title, items, day], s) => ({ id: "s" + s, title, day, items: items.map((text, i) => ({ id: `d${s}-${i}`, text })) })),
 });
 const emptyCur = () => ({ checks: {}, na: {}, notes: {}, fields: {}, attach: [], editedAt: 0, savedAt: 0 });
@@ -414,6 +414,13 @@ function normalize(d) {
   }
   if (d.cfg.texts.lead === LEAD_V02) d.cfg.texts.lead = DEFAULT_TEXTS.lead;
   if (d.cfg.texts.memo === "메모 · 내일로 넘길 일") d.cfg.texts.memo = DEFAULT_TEXTS.memo;
+  // 받은 파일에 들어 있던 제목 · 이름을 한 번 걷어 낸다 (이 기기에서 한 번만 — 그 뒤 직접 적은 이름은 건드리지 않음)
+  if (!d.cfg.ownTexts) {
+    if (d.cfg.texts.title === "나의 일일 체크리스트") d.cfg.texts.title = DEFAULT_TEXTS.title;
+    d.cfg.areas = d.cfg.areas.filter(a => a !== "전이사");
+    for (const k in d.days) if (d.days[k].fields["f-area"] === "전이사") d.days[k].fields["f-area"] = "";
+    d.cfg.ownTexts = true;
+  }
   d.date = today();  // 열 때는 늘 오늘
   return d;
 }
@@ -506,7 +513,7 @@ function paintRecords() {
   if (!keys.length) sel.append(el("option", { value: "", textContent: "저장한 기록 없음" }));
   keys.forEach(k => {
     const r = db.records[k];
-    sel.append(el("option", { value: k, textContent: `${k.slice(0, 10)} (${WD[wd(k.slice(0, 10))]}) · ${k.slice(11)}  (저장 ${timeStr(r.savedAt)})` }));
+    sel.append(el("option", { value: k, textContent: `${k.slice(0, 10)} (${WD[wd(k.slice(0, 10))]})${k.slice(11) ? " · " + k.slice(11) : ""}  (저장 ${timeStr(r.savedAt)})` }));
   });
 }
 
@@ -772,7 +779,7 @@ const JSON_TYPE = [{ description: "체크 기록", accept: { "application/json":
 async function pickFile() {
   if (!window.showSaveFilePicker) return null;
   try {
-    const h = await showSaveFilePicker({ suggestedName: "나의일일체크_기록.json", types: JSON_TYPE });
+    const h = await showSaveFilePicker({ suggestedName: "나의주간체크_기록.json", types: JSON_TYPE });
     await setHandle(h); return h;
   } catch (e) { return null; }
 }
@@ -1329,7 +1336,7 @@ async function exportPages(S) {
     new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = a.thumb; })));
   return renderPages(buildBlocks(imgs), S, [cfg().texts.title, `${db.date} (${WD[wd(db.date)]})`]);
 }
-const baseName = () => `나의일일체크_${db.date.replaceAll("-", "")}_${WD[wd(db.date)]}`;
+const baseName = () => `나의주간체크_${db.date.replaceAll("-", "")}_${WD[wd(db.date)]}`;
 
 function download(blob, name) {
   const a = el("a", { href: URL.createObjectURL(blob), download: name });
@@ -1420,7 +1427,7 @@ async function makePdf(canvases) {
 
 // ---------- 기기 연동 (Firebase: 이메일 로그인 + Firestore) ----------
 // 웹 설정값은 공개해도 되는 식별값이다. 기록은 Firestore 보안 규칙으로 본인 계정만 읽고 쓴다.
-// 일일 체크리스트 앱과 같은 프로젝트 · 같은 계정을 쓰고, 기록은 users/<uid>/weekly/<문서> 에 둔다.
+// 기록은 users/<uid>/weekly/<문서> 에 둔다.
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBXF7KNkEu0txyq8llUvybOZnQjpYgvGgI",
   authDomain: "my-checklist-90eda.firebaseapp.com",
