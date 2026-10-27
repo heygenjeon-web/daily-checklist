@@ -1,0 +1,17 @@
+# 주간 체크리스트 알림 서버 — 올리기: npx wrangler deploy (이 폴더에서)
+# 비밀 키는 여기 적지 않는다: npx wrangler secret put VAPID_PRIVATE
+name = "weekly-push"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# 1분마다 그 시각 항목 알림
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+VAPID_PUBLIC = "BHRIaS8vvbCoapXi_zv7hAFeN40ZzlFbsmaHfPqnWkMU9EQCEAcKXPXk66w-oQ2BB5Z_7D4wfJeBRn5WtHSLqxk"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "4ccd188fe3954ba29da95679bd5b4e9b"

@@ -1773,7 +1773,7 @@ $("logoutBtn").onclick = async () => {
 // ---------- 알림 (Cloudflare Workers 알림 서버 · 웹 푸시) ----------
 // 시간 정한 항목과 오늘 끝낸 항목을 알림 서버에 보내 두면, 그 시각에 아직 안 한 항목을 알림 켠 기기로 알려 준다.
 // 아이폰 · 아이패드(iOS 16.4 이상)는 홈 화면에 추가한 앱에서만 켤 수 있다. 서버 코드는 저장소의 push-worker/
-const PUSH_URL = "";
+const PUSH_URL = "https://weekly-push.my-checklist.workers.dev";
 const VAPID_PUBLIC = "BHRIaS8vvbCoapXi_zv7hAFeN40ZzlFbsmaHfPqnWkMU9EQCEAcKXPXk66w-oQ2BB5Z_7D4wfJeBRn5WtHSLqxk";
 const push = { reg: null, sub: null, sent: "", timer: 0, msg: "", ok: false };
 const canPush = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
