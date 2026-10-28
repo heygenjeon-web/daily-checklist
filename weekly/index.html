@@ -1849,7 +1849,10 @@ $("pushOn").onclick = () => busy($("pushOn"), "켜는 중…", async () => {
   finally { renderPush(); }
 });
 $("pushTest").onclick = () => busy($("pushTest"), "보내는 중…", async () => {
-  try { await pushCall("/test", { endpoint: push.sub.endpoint }); pushMsg("시험 알림을 보냈어요. 몇 초 안에 와요.", true); }
+  try {
+    await pushCall("/test", { endpoint: push.sub.endpoint });
+    pushMsg("5초 뒤에 시험 알림이 와요." + (isIOS() ? " 앱이 화면에 떠 있으면 안 보일 수 있으니, 지금 홈 화면으로 나가거나 화면을 꺼 보세요." : ""), true);
+  }
   catch (e) { pushMsg(e.message || String(e)); }
 });
 $("pushOff").onclick = () => busy($("pushOff"), "끄는 중…", async () => {

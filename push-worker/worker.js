@@ -19,7 +19,7 @@ const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length
 const fail = (msg, status = 400) => Object.assign(new Error(msg), { status });
 
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const origin = req.headers.get("Origin") || "";
     const ok = ORIGINS.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
     const cors = { "Access-Control-Allow-Origin": ok ? origin : ORIGINS[0], "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", Vary: "Origin" };
@@ -28,7 +28,7 @@ export default {
     try {
       const body = await req.json();
       const uid = await verify(body.token, env);
-      return Response.json(await route(new URL(req.url).pathname, body, uid, env), { headers: cors });
+      return Response.json(await route(new URL(req.url).pathname, body, uid, env, ctx), { headers: cors });
     } catch (e) {
       return Response.json({ error: String((e && e.message) || e) }, { status: (e && e.status) || 500, headers: cors });
     }
@@ -59,7 +59,7 @@ export async function verify(token, env) {
 
 // ---------- 페이지 요청 ----------
 // /sub 이 기기 등록 · /unsub 해제 · /sched 항목만 · /test 이 기기로 시험 알림 — 어느 요청이든 sched(항목 · 오늘 끝낸 것)를 같이 받는다
-async function route(path, b, uid, env) {
+async function route(path, b, uid, env, ctx) {
   const key = "u:" + uid, stored = await env.KV.get(key, "json");
   const u = stored || { subs: [], items: [], done: null, tz: -540 };
   const before = JSON.stringify(u);
@@ -80,8 +80,15 @@ async function route(path, b, uid, env) {
   if (path === "/test") {
     const s = u.subs.find(x => x.endpoint === b.endpoint);
     if (!s) throw fail("이 기기 알림이 등록되어 있지 않습니다 — 알림을 다시 켜세요");
-    const r = await send(s, { title: "알림이 잘 옵니다", body: "항목에 정한 시간이 되면 이렇게 알려 드려요.", tag: "test" }, env);
-    if (!r.ok) throw fail(`알림 서비스가 받지 않았습니다 (${r.status}) — 알림을 껐다가 다시 켜 보세요`, 502);
+    // 5초 뒤에 보낸다 — 앱이 화면에 떠 있으면 아이폰이 알림을 띄우지 않아서, 그 사이 홈 화면으로 나가 보게
+    const later = async () => {
+      await new Promise(r => setTimeout(r, env.TEST_DELAY ?? 5000));
+      const r = await send(s, { title: "알림이 잘 옵니다", body: "항목에 정한 시간이 되면 이렇게 알려 드려요.", tag: "test" }, env);
+      console.log("시험 알림", new URL(s.endpoint).hostname, r.status);
+      if (r.status === 404 || r.status === 410) await drop(env, uid, [s.endpoint]);  // 지워진 기기 — 다음 시험에서 「다시 켜세요」
+    };
+    if (ctx) ctx.waitUntil(later().catch(e => console.log("시험 알림 실패", String(e)))); else await later();
+    return { ok: true, subs: u.subs.length, delay: 5 };
   }
   return { ok: true, subs: u.subs.length };
 }
@@ -127,11 +134,14 @@ export async function tick(when, env) {
       const r = await send(s, msg, env).catch(() => null);
       if (r && (r.status === 404 || r.status === 410)) gone.push(s.endpoint);  // 지워진 기기
     }
-    if (gone.length) {
-      u.subs = u.subs.filter(s => !gone.includes(s.endpoint));
-      if (u.subs.length) await env.KV.put(key, JSON.stringify(u)); else { await env.KV.delete(key); await index(env, uid, false); }
-    }
+    if (gone.length) await drop(env, uid, gone);
   }
+}
+async function drop(env, uid, gone) {
+  const key = "u:" + uid, u = await env.KV.get(key, "json");
+  if (!u) return;
+  u.subs = u.subs.filter(s => !gone.includes(s.endpoint));
+  if (u.subs.length) await env.KV.put(key, JSON.stringify(u)); else { await env.KV.delete(key); await index(env, uid, false); }
 }
 
 // ---------- 웹 푸시 (RFC 8291 aes128gcm 암호화 + RFC 8292 VAPID) ----------
