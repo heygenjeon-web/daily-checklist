@@ -24,7 +24,7 @@ export default {
     const ok = ORIGINS.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
     const cors = { "Access-Control-Allow-Origin": ok ? origin : ORIGINS[0], "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", Vary: "Origin" };
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
-    if (req.method !== "POST") return new Response("주간 체크 알림 서버", { headers: { ...cors, "Content-Type": "text/plain; charset=utf-8" } });
+    if (req.method !== "POST") return new Response("주간 체크 알림 서버 · " + await keyState(env), { headers: { ...cors, "Content-Type": "text/plain; charset=utf-8" } });
     try {
       const body = await req.json();
       const uid = await verify(body.token, env);
@@ -35,6 +35,15 @@ export default {
   },
   async scheduled(event, env, ctx) { ctx.waitUntil(tick(event.scheduledTime, env)); },
 };
+
+// 서명 키 점검(주소를 열면 보임) — 비밀 키에서 공개 키를 다시 만들어 페이지 쪽 키와 같은지만 알린다
+async function keyState(env) {
+  try {
+    const j = JSON.parse(env.VAPID_PRIVATE);
+    await crypto.subtle.importKey("jwk", j, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+    return b64u.enc(cat(new Uint8Array([4]), b64u.dec(j.x), b64u.dec(j.y))) === env.VAPID_PUBLIC ? "서명 키 맞음" : "서명 키가 공개 키와 다름";
+  } catch (e) { return "서명 키를 읽지 못함"; }
+}
 
 // ---------- 로그인 확인 (Firebase ID 토큰 = RS256 JWT) ----------
 let keyCache = { at: 0, keys: {} };
