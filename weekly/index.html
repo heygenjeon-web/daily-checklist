@@ -966,13 +966,19 @@ const KINDS = {
   buy: [["what", "품목"], ["qty", "수량", 64], ["price", "금액", 96], ["note", "비고", 120]],
 };
 function visTasks(kind, D = db.date) {
-  return db.tasks.filter(t => t.kind === kind && t.date <= D && (!t.done || t.done >= D))
+  const seen = new Set();
+  return db.tasks.filter(t => t.kind === kind && t.date <= D && (!t.done || t.done >= D)
+      && (kind !== "carry" || (!(t.src && seen.has(t.src)) && seen.add(t.src) && !(taken(t) <= D))))
     .sort((a, b) => byStar(a, b) || a.date.localeCompare(b.date));
 }
+// 그날 체크리스트에 있는 항목 글
+const dayTexts = D => new Set(cfg().sections.filter(s => s.day == null || s.day === wd(D)).flatMap(s => s.items.map(i => i.text)));
+// 넘어온 일은 같은 항목이 체크리스트에 다시 나오는 날부터 그 항목이 이어받는다 (나중에 요일을 늘린 항목이 두 번 보이지 않게)
+const taken = t => { for (let k = 0; k < 7; k++) { const d = shift(t.date, k); if (dayTexts(d).has(t.what)) return d; } return null; };
 // 저장한 날(P)에 체크 못 한 항목 → 다음 날부터 「넘어온 일」. 다음 날 체크리스트에 같은 항목이 있으면 넘기지 않음(매일 하는 일)
 function carryOver(P) {
   const c = db.days[P] || emptyCur(), next = shift(P, 1);
-  const nextTexts = new Set(cfg().sections.filter(s => s.day == null || s.day === wd(next)).flatMap(s => s.items.map(i => i.text)));
+  const nextTexts = dayTexts(next);
   daySecs().forEach(sec => sec.items.forEach(it => {
     const src = `${P}|${it.id}`, open = db.tasks.find(t => t.src === src);
     const left = !c.checks[it.id] && !c.na[it.id] && !nextTexts.has(it.text);
@@ -1407,7 +1413,8 @@ async function exportPages(S) {
     new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = a.thumb; })));
   return renderPages(buildBlocks(imgs), S, [cfg().texts.title, `${db.date} (${WD[wd(db.date)]})`]);
 }
-const baseName = () => `나의주간체크_${db.date.replaceAll("-", "")}_${WD[wd(db.date)]}`;
+// 저장 파일 이름 — 예: 「10월 27일 화요일 체크리스트」
+const baseName = () => { const [, m, d] = db.date.split("-"), w = WD[wd(db.date)]; return `${+m}월 ${+d}일 ${w === "주일" ? w : w + "요일"} 체크리스트`; };
 
 function download(blob, name) {
   const a = el("a", { href: URL.createObjectURL(blob), download: name });
