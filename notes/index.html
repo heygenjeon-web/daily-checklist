@@ -43,7 +43,7 @@ textarea { resize:vertical; line-height:1.5; min-height:39px; overflow:hidden; }
 input:focus, textarea:focus { outline:2px solid var(--ink); outline-offset:-1px; }
 
 /* 목록 */
-.tabs { display:grid; grid-template-columns:repeat(3, 1fr); border:1px solid var(--line); background:#fff; margin:0 0 14px; }
+.tabs { position:sticky; top:0; z-index:5; display:grid; grid-template-columns:repeat(3, 1fr); border:1px solid var(--line); background:#fff; margin:0 0 14px; }
 .tabs a { padding:12px 0; text-align:center; color:var(--sub); text-decoration:none; border-left:1px solid var(--line); font-size:15px; }
 .tabs a:first-child { border-left:0; }
 .tabs a.on { background:var(--ink); color:#fff; font-family:var(--B); }
