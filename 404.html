@@ -6,8 +6,9 @@
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>페이지를 찾지 못했습니다</title>
 <script>
-  // 주소 끝에 괄호·마침표가 붙었거나, 예전 일일 체크리스트 주소여도 주간 체크리스트로 보낸다
-  if (/^\/daily-checklist(\/|$)/i.test(location.pathname)) location.replace("/daily-checklist/weekly/");
+  // 주소 끝에 괄호·마침표가 붙었거나, 예전 일일 체크리스트 주소여도 주간 체크리스트로 보낸다 (notes 로 시작하면 매뉴얼 · 회의록으로)
+  if (/^\/daily-checklist\/notes/i.test(location.pathname)) location.replace("/daily-checklist/notes/");
+  else if (/^\/daily-checklist(\/|$)/i.test(location.pathname)) location.replace("/daily-checklist/weekly/");
 </script>
 <style>
   body { margin: 0; padding: 40px 16px; font-family: -apple-system, "Malgun Gothic", sans-serif; background: #f4f2ee; color: #1d1d1f; line-height: 1.6; }
@@ -20,6 +21,7 @@
   <h1>페이지를 찾지 못했습니다</h1>
   <p>주소가 조금 다른 것 같습니다. 아래에서 여세요.</p>
   <a href="/daily-checklist/weekly/">주간 체크리스트</a>
+  <a href="/daily-checklist/notes/">매뉴얼 · 회의록</a>
 </main>
 </body>
 </html>
