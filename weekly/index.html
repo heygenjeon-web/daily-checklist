@@ -242,12 +242,6 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
     </div>
   </section>
 
-  <section class="card" id="carryCard" hidden>
-    <h2><span class="t" data-t="carry"></span><small id="carryCount"></small></h2>
-    <p class="hint">저장할 때 체크하지 못한 항목이 다음 날로 넘어옵니다. 하면 체크하고, 안 해도 되면 ✕로 지웁니다.</p>
-    <div id="carryList"></div>
-  </section>
-
   <div id="sections"></div>
   <button class="add weekbtn" id="weekBtn">요일별 항목 한번에 설정</button>
   <div id="weekEdit"></div>
@@ -369,10 +363,10 @@ const DEFAULT = [
 ];
 const DEFAULT_TEXTS = {
   title: "나의 주간 체크리스트",
-  lead: "열면 오늘 요일이 나옵니다. ☆를 누르면 ★ 중요 표시가 되어 맨 위 「오늘 꼭 할 일」에 올라갑니다. 「저장」하면 체크 못 한 항목은 다음 날로 넘어가고, 추가 봉사업무 · 할 일 · 구매할 일은 끝낼 때까지 날마다 따라옵니다. 항목을 고칠 때는 요일 옆 「편집」(처음 비밀번호 0000).",
+  lead: "열면 오늘 요일이 나옵니다. ☆를 누르면 ★ 중요 표시가 되어 맨 위 「오늘 꼭 할 일」에 올라갑니다. 체크리스트 항목은 그날로 끝나고, 추가 봉사업무 · 할 일 · 구매할 일은 끝낼 때까지 날마다 따라옵니다. 항목을 고칠 때는 요일 옆 「편집」(처음 비밀번호 0000).",
   info: "기본 정보", memo: "메모 (오늘 내용)", attach: "사진 · 자료",
   l_date: "날짜", l_area: "이름", l_file: "오늘 목표", l_maker: "중요 일정",
-  must: "★ 오늘 꼭 할 일", next: "내일로 넘길 일", prev: "전날 넘긴 일", carry: "넘어온 일", extra: "추가 봉사업무", todo: "할 일", buy: "구매할 일", stock: "재고",
+  must: "★ 오늘 꼭 할 일", next: "내일로 넘길 일", prev: "전날 넘긴 일", extra: "추가 봉사업무", todo: "할 일", buy: "구매할 일", stock: "재고",
 };
 // 주간판(v01) 기본 글 — 사용자가 고치지 않은 것만 새 글로 바꿈
 const OLD_TEXTS = {
@@ -380,6 +374,7 @@ const OLD_TEXTS = {
   info: "이번 주", memo: "메모 · 다음 주로 넘길 일", attach: "이번 주 사진 · 자료",
   l_date: "주 시작일 (월)", l_file: "이번 주 목표", l_checker: "다음 주 준비",
 };
+const LEAD_CARRY = "「저장」하면 체크 못 한 항목은 다음 날로 넘어가고,";  // 요일 항목 이월을 없애기 전 안내
 const LEAD_V02 = "열면 오늘 요일이 나옵니다. 다른 날은 위 요일 칸을 누르세요. 해당 없는 항목은 「사유」를, 항목을 고칠 때는 요일 옆 「편집」(처음 비밀번호 0000)을 누르세요. 「저장」을 누르면 그날 기록이 남습니다.";
 const NA_TEXT = "해당 없음";
 
@@ -462,6 +457,7 @@ function normalize(d) {
     if (st.fields["f-checker"]) { st.fields["f-next"] = st.fields["f-next"] || st.fields["f-checker"]; delete st.fields["f-checker"]; }
   }
   if (d.cfg.texts.lead === LEAD_V02) d.cfg.texts.lead = DEFAULT_TEXTS.lead;
+  d.cfg.texts.lead = d.cfg.texts.lead.replace(LEAD_CARRY, "체크리스트 항목은 그날로 끝나고,");
   if (d.cfg.texts.memo === "메모 · 내일로 넘길 일") d.cfg.texts.memo = DEFAULT_TEXTS.memo;
   // 받은 파일에 들어 있던 제목 · 이름을 한 번 걷어 낸다 (이 기기에서 한 번만 — 그 뒤 직접 적은 이름은 건드리지 않음)
   if (!d.cfg.ownTexts) {
@@ -799,7 +795,7 @@ function refresh() {
     const live = sec.items.filter(i => !c.na[i.id]);
     e.textContent = `${live.filter(i => c.checks[i.id]).length} / ${live.length}`;
   });
-  const must = mustList().length, open = ["carry", "extra", "todo"].reduce((n, k) => n + visTasks(k).filter(t => t.done !== db.date).length, 0);
+  const must = mustList().length, open = ["extra", "todo"].reduce((n, k) => n + visTasks(k).filter(t => t.done !== db.date).length, 0);
   $("count").textContent = tallyText(tally()) + (must ? ` · ★ 남음 ${must}` : "") + (open ? ` · 남은 일 ${open}` : "");
   showSaveState();
 }
@@ -870,8 +866,7 @@ async function writeFile(h) {
 
 $("saveBtn").onclick = async () => {
   const left = mustList().length;
-  if (left && !await ask(`★ 표시한 일 ${left}개가 아직 남았습니다.\n그래도 저장할까요? (못 한 일은 다음 날로 넘어갑니다)`)) return;
-  carryOver(db.date);
+  if (left && !await ask(`★ 표시한 일 ${left}개가 아직 남았습니다.\n그래도 저장할까요?`)) return;
   const c = cur(), key = `${db.date}_${c.fields["f-area"] || ""}`;
   c.savedAt = Date.now(); c.editedAt = Math.min(c.editedAt, c.savedAt);
   db.records[key] = clone({ ...c, savedAt: c.savedAt });
@@ -962,40 +957,21 @@ $("resetCfg").onclick = async () => {
 
 // ---------- 날마다 따라오는 목록 ----------
 // db.tasks = [{ id, kind, date(적은 날), done(끝낸 날 | null), star, …칸 }]
-//   kind: carry(저장 때 체크 못 한 항목, from = 그날) · extra(추가 봉사업무) · todo(할 일) · buy(구매할 일)
+//   kind: extra(추가 봉사업무) · todo(할 일) · buy(구매할 일) — 요일 체크리스트 항목은 그날로 끝난다 (예전 판의 kind: carry 는 남아 있어도 보이지 않음)
 //   D 날 보임 = 적은 날 ≤ D 이고 아직 안 끝냈거나 D 이후에 끝냄 → 못 하면 다음 날로 계속 넘어감
 const KINDS = {
-  carry: [],
   extra: [["t", "", 128, "time"], ["who", "요청자", 110], ["what", "내용 (언제까지)"]],
   todo: [["what", "할 일"]],
   buy: [["what", "품목"], ["qty", "수량", 64], ["price", "금액", 96], ["note", "비고", 120]],
 };
 function visTasks(kind, D = db.date) {
-  const seen = new Set();
-  return db.tasks.filter(t => t.kind === kind && t.date <= D && (!t.done || t.done >= D)
-      && (kind !== "carry" || (!(t.src && seen.has(t.src)) && seen.add(t.src) && !(taken(t) <= D))))
+  return db.tasks.filter(t => t.kind === kind && t.date <= D && (!t.done || t.done >= D))
     .sort((a, b) => byStar(a, b) || a.date.localeCompare(b.date));
-}
-// 그날 체크리스트에 있는 항목 글
-const dayTexts = D => new Set(cfg().sections.filter(s => s.day == null || s.day === wd(D)).flatMap(s => s.items.map(i => i.text)));
-// 넘어온 일은 같은 항목이 체크리스트에 다시 나오는 날부터 그 항목이 이어받는다 (나중에 요일을 늘린 항목이 두 번 보이지 않게)
-const taken = t => { for (let k = 0; k < 7; k++) { const d = shift(t.date, k); if (dayTexts(d).has(t.what)) return d; } return null; };
-// 저장한 날(P)에 체크 못 한 항목 → 다음 날부터 「넘어온 일」. 다음 날 체크리스트에 같은 항목이 있으면 넘기지 않음(매일 하는 일)
-function carryOver(P) {
-  const c = db.days[P] || emptyCur(), next = shift(P, 1);
-  const nextTexts = dayTexts(next);
-  daySecs().forEach(sec => sec.items.forEach(it => {
-    const src = `${P}|${it.id}`, open = db.tasks.find(t => t.src === src);
-    const left = !c.checks[it.id] && !c.na[it.id] && !nextTexts.has(it.text);
-    if (left && !open) db.tasks.push({ id: uid(), kind: "carry", date: next, from: P, src, what: it.text, star: !!it.star, done: null });
-    if (!left && open && !open.done) db.tasks.splice(db.tasks.indexOf(open), 1);
-  }));
 }
 function taskRow(t, D) {
   const done = t.done === D;
   const cb = el("input", { type: "checkbox", checked: done, onchange: () => { t.done = cb.checked ? D : null; touch(); build(); } });
   const fs = el("div", { className: "fs" });
-  if (t.kind === "carry") fs.append(el("span", { className: "txt", textContent: t.what }));
   const sum = t.kind === "buy" ? el("span", { className: "sum" }) : null;
   const showSum = () => { if (sum) { sum.textContent = lineTotal(t) ? won(lineTotal(t)) : ""; paintBuyTotal(); } };
   KINDS[t.kind].forEach(([k, ph, w, type]) => {
@@ -1007,9 +983,9 @@ function taskRow(t, D) {
     if (sum && k === "price") fs.append(sum);  // 합계는 금액 바로 뒤, 비고는 맨 끝
   });
   if (sum) { sum.title = "합계 (수량 × 금액)"; sum.textContent = lineTotal(t) ? won(lineTotal(t)) : ""; }
-  const from = t.kind === "carry" ? `${md(t.from)} 못 한 일` : t.date < D ? `${md(t.date)}부터 이월` : "";
-  // 사유(추가 봉사업무 · 넘어온 일) — 그날에만 적힘, 이월은 그대로
-  const why = (t.reasons || {})[D], canWhy = t.kind === "extra" || t.kind === "carry";
+  const from = t.date < D ? `${md(t.date)}부터 이월` : "";
+  // 사유(추가 봉사업무) — 그날에만 적힘, 이월은 그대로
+  const why = (t.reasons || {})[D], canWhy = t.kind === "extra";
   const whyBtn = !canWhy ? el("span") : el("button", { className: "sm" + (why != null ? " on" : ""), textContent: why != null ? "사유 ✓" : "사유",
     title: "못 한 이유 · 메모", onclick: () => {
       t.reasons = t.reasons || {};
@@ -1056,9 +1032,8 @@ function paintTasks() {
     const list = visTasks(k), left = list.filter(t => t.done !== D).length;
     $(k + "List").replaceChildren(...list.map(t => taskRow(t, D)));
     const moved = list.filter(t => t.date < D && t.done !== D).length;
-    $(k + "Count").textContent = list.length ? `남음 ${left} / ${list.length}` + (moved && k !== "carry" ? ` · 이월 ${moved}` : "") : "";
+    $(k + "Count").textContent = list.length ? `남음 ${left} / ${list.length}` + (moved ? ` · 이월 ${moved}` : "") : "";
   });
-  $("carryCard").hidden = !visTasks("carry").length;
   paintBuyTotal();
   const must = mustList();
   $("mustCard").hidden = !must.length || admin;
@@ -1292,7 +1267,7 @@ function buildBlocks(imgs) {
     }
     gap(14);
   };
-  // 한 줄 항목(네모 칸 + 글) — 체크리스트 · 넘어온 일 · 목록이 같이 씀
+  // 한 줄 항목(네모 칸 + 글) — 체크리스트 · 목록이 같이 씀
   const line = (text, ok, na, note, left = "미확인") => {
     font(m, R, 23); const lines = wrap(m, text, IW - 160);
     font(m, R, 20); const nl = note ? wrap(m, "사유: " + note, IW - 60) : [];
@@ -1322,12 +1297,6 @@ function buildBlocks(imgs) {
   };
   const D = db.date, mark = s => s ? "★ " : "", why = t => (t.reasons || {})[D] || "";
   textBlock(`${T.prev} (${md(shift(D, -1))})`, ((db.days[shift(D, -1)] || {}).fields || {})["f-next"]);
-  const carried = visTasks("carry");
-  if (carried.length) {
-    sectionTitle(`${T.carry} (${carried.length})`);
-    carried.forEach(t => line(mark(t.star) + t.what + `  (${md(t.from)} 못 한 일)`, t.done === D, false, why(t), "남음"));
-    gap(14);
-  }
   daySecs().forEach(sec => {
     sectionTitle(sec.title + dayTag(sec));
     [...sec.items].sort((a, b) => byTime(a, b) || byStar(a, b)).forEach(it => line(mark(it.star) + withTime(it), !!c.checks[it.id], !!c.na[it.id], c.notes[it.id]));
