@@ -113,6 +113,12 @@ button.save { background:var(--ok); color:#fff; border-color:var(--ok); font-fam
 dialog { border:0; border-radius:0; padding:22px; width:min(400px, calc(100% - 32px)); box-shadow:0 12px 40px rgba(0,0,0,.25); }
 dialog p { margin:0 0 14px; font-size:16px; line-height:1.5; white-space:pre-line; }
 dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+.weeknav { display:grid; grid-template-columns:auto 1fr auto; border:1px solid var(--line); border-bottom:0; background:#fff; }
+.weeknav button { border:0; border-radius:0; padding:8px 12px; font-size:13px; line-height:1.35; background:#fff; color:var(--sub); white-space:nowrap; }
+.weeknav #wkNow { border-left:1px solid var(--line); border-right:1px solid var(--line); color:var(--ink); font-family:var(--B); white-space:normal; cursor:default; }
+.weeknav #wkNow small { display:block; font-family:var(--R); font-size:12px; }
+.weeknav.away, .weeknav.away button { background:#fdf3ea; }
+.weeknav.away #wkNow { color:var(--warn); cursor:pointer; }
 .days { display:grid; grid-template-columns:repeat(7, 1fr); margin:0 0 14px; border:1px solid var(--line); background:#fff; }
 .days button { border:0; border-left:1px solid var(--line); border-radius:0; padding:8px 0; font-size:13px; line-height:1.35; background:#fff; color:var(--sub); }
 .days button:first-child { border-left:0; }
@@ -175,6 +181,11 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
     </span>
   </div>
 
+  <div class="weeknav" id="weeknav">
+    <button type="button" id="wkPrev">◀ 지난 주</button>
+    <button type="button" id="wkNow"></button>
+    <button type="button" id="wkNext">다음 주 ▶</button>
+  </div>
   <nav class="days" id="days"></nav>
 
   <section class="card must" id="mustCard" hidden>
@@ -519,7 +530,18 @@ function paintDays() {
     host.append(el("button", { className: (date === db.date ? "on" : "") + (date === t ? " today" : ""), title: date, onclick: () => go(date) },
       el("b", { textContent: w }), `${d.getMonth() + 1}/${d.getDate()}`));
   });
+  // 위 줄: ◀ 지난 주 · 보고 있는 주 · 다음 주 ▶ (다른 주를 볼 때는 가운데를 누르면 오늘로)
+  const n = Math.round((parse(mon) - parse(monday(t))) / (7 * 864e5));
+  const name = n === 0 ? "이번 주" : n === -1 ? "지난 주" : n === 1 ? "다음 주" : n < 0 ? `${-n}주 전` : `${n}주 뒤`;
+  const sun = parse(shift(mon, 6)), m0 = parse(mon);
+  const range = `${m0.getMonth() + 1}/${m0.getDate()} ~ ${sun.getMonth() + 1}/${sun.getDate()}`;
+  $("weeknav").classList.toggle("away", n !== 0);
+  $("wkNow").replaceChildren(`${name} ${range}`, ...(n !== 0 ? [el("small", { textContent: "눌러서 오늘로" })] : []));
+  $("wkNow").title = n !== 0 ? "오늘로 돌아가기" : "";
 }
+$("wkPrev").onclick = () => go(shift(db.date, -7));
+$("wkNext").onclick = () => go(shift(db.date, 7));
+$("wkNow").onclick = () => { if (db.date !== today()) go(today()); };
 function go(date) { db.date = date; persist(); paintFields(); build(); }
 function el(tag, props = {}, ...kids) {
   const e = Object.assign(document.createElement(tag), props);
