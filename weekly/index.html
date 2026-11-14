@@ -89,6 +89,10 @@ textarea { min-height:70px; resize:vertical; }
   .row.ed .tmin > span { left:39px; }
 }
 .item.dropto { box-shadow:inset 0 3px 0 var(--admin); }
+.wlrow { display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; margin-bottom:10px; }
+.wlrow input[type=time] { width:132px; flex:none; font-size:15px; padding:6px 6px; border:1px solid var(--line); border-radius:0; background:#fff; color:var(--ink); min-height:36px; font-variant-numeric:tabular-nums; }
+.wlrow .wt { order:4; flex:1 1 150px; min-width:0; width:auto; }
+.wlrow .sm { order:5; min-height:36px; }
 .add { margin-top:8px; color:var(--admin); border-style:dashed; width:100%; }
 .del { color:#b3261e; }
 .bar { position:fixed; left:0; right:0; bottom:0; background:rgba(255,255,255,.97); border-top:1px solid var(--line); }
@@ -256,6 +260,13 @@ dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
   <div id="sections"></div>
   <button class="add weekbtn" id="weekBtn">요일별 항목 한번에 설정</button>
   <div id="weekEdit"></div>
+
+  <section class="card">
+    <h2><span class="t">실제 한 일</span><small id="workSum"></small></h2>
+    <p class="hint">오늘 실제로 한 일을 시간과 함께 적으세요. 이날에만 남고, A4 이미지·PDF에도 들어갑니다.</p>
+    <div id="workList"></div>
+    <button class="add" id="workAdd">+ 한 일 적기</button>
+  </section>
 
   <section class="card">
     <h2><span class="t" data-t="extra"></span><small id="extraCount"></small></h2>
@@ -428,7 +439,7 @@ const defaultCfg = () => ({
   pin: "0000", texts: { ...DEFAULT_TEXTS }, areas: [],
   sections: DEFAULT.map(([title, items, day], s) => ({ id: "s" + s, title, day, items: items.map((text, i) => ({ id: `d${s}-${i}`, text })) })),
 });
-const emptyCur = () => ({ checks: {}, na: {}, notes: {}, fields: {}, attach: [], editedAt: 0, savedAt: 0 });
+const emptyCur = () => ({ checks: {}, na: {}, notes: {}, fields: {}, attach: [], work: [], editedAt: 0, savedAt: 0 });
 
 function normalize(d) {
   d.cfg = Object.assign(defaultCfg(), d.cfg || {});
@@ -542,6 +553,39 @@ function paintDays() {
 $("wkPrev").onclick = () => go(shift(db.date, -7));
 $("wkNext").onclick = () => go(shift(db.date, 7));
 $("wkNow").onclick = () => { if (db.date !== today()) go(today()); };
+// ---------- 실제 한 일 (그날 시작~끝 시간 + 내용) ----------
+const HM = /^\d\d:\d\d$/;
+const workMin = w => {
+  if (!HM.test(w.s || "") || !HM.test(w.e || "")) return 0;
+  const a = +w.s.slice(0, 2) * 60 + +w.s.slice(3), b = +w.e.slice(0, 2) * 60 + +w.e.slice(3);
+  return b > a ? b - a : 0;
+};
+const fmtMin = n => n >= 60 ? `${Math.floor(n / 60)}시간${n % 60 ? " " + (n % 60) + "분" : ""}` : `${n}분`;
+function paintWorkSum() {
+  const n = (cur().work || []).reduce((a, w) => a + workMin(w), 0);
+  $("workSum").textContent = n ? "합계 " + fmtMin(n) : "";
+}
+function paintWork() {
+  const list = cur().work ||= [], host = $("workList");
+  host.innerHTML = "";
+  list.forEach((w, i) => {
+    const on = (k, ev) => ({ [ev]: e => { w[k] = e.target.value; touch(); paintWorkSum(); } });
+    host.append(el("div", { className: "wlrow" },
+      el("input", { type: "time", value: w.s || "", "aria-label": "시작", ...on("s", "oninput") }),
+      el("span", { textContent: "~" }),
+      el("input", { type: "time", value: w.e || "", "aria-label": "끝", ...on("e", "oninput") }),
+      el("button", { className: "sm", textContent: "×", title: "이 줄 지우기", onclick: () => { list.splice(i, 1); touch(); paintWork(); } }),
+      el("input", { type: "text", className: "wt", value: w.t || "", placeholder: "한 일", autocomplete: "off", ...on("t", "oninput") })));
+  });
+  paintWorkSum();
+}
+$("workAdd").onclick = () => {
+  const list = cur().work ||= [], d = new Date(), pad2 = n => String(n).padStart(2, "0");
+  const prev = list.length ? list[list.length - 1].e : "";
+  list.push({ id: uid(), s: HM.test(prev || "") ? prev : `${pad2(d.getHours())}:${pad2(d.getMinutes())}`, e: "", t: "" });
+  touch(); paintWork();
+  const ins = $("workList").querySelectorAll(".wt"); ins[ins.length - 1].focus();
+};
 function go(date) { db.date = date; persist(); paintFields(); build(); }
 function el(tag, props = {}, ...kids) {
   const e = Object.assign(document.createElement(tag), props);
@@ -607,6 +651,7 @@ function build() {
   $("adminBtn").hidden = admin;
   paintTexts();
   paintDays();
+  if (!$("workList").contains(document.activeElement)) paintWork();  // 적는 중이면 다시 그리지 않음
   const host = $("sections");
   host.innerHTML = "";
   cfg().sections.forEach((sec, si) => {
@@ -1396,6 +1441,24 @@ function buildBlocks(imgs) {
       } });
     }
     gap(6);
+  }
+
+  // 실제 한 일 — 시간 순서로, 합계와 함께
+  const works = (c.work || []).filter(w => (w.t || "").trim() || w.s || w.e)
+    .sort((a, b) => (a.s || "99:99").localeCompare(b.s || "99:99"));
+  if (works.length) {
+    const sum = works.reduce((a, w) => a + workMin(w), 0);
+    sectionTitle("실제 한 일" + (sum ? ` · 합계 ${fmtMin(sum)}` : ""));
+    font(m, R, 23);
+    works.forEach(w => {
+      const when = w.s || w.e ? `${w.s || ""} ~ ${w.e || ""}` : "";
+      const tl = wrap(m, (w.t || "").trim() || "—", IW - 250);
+      out.push({ h: tl.length * 34 + 8, draw(ctx, y) {
+        font(ctx, R, 23); ctx.fillStyle = "#6b6b70"; ctx.fillText(when, P, y + 24);
+        ctx.fillStyle = "#1d1d1f"; tl.forEach((ln, j) => ctx.fillText(ln, P + 250, y + 24 + j * 34));
+      } });
+    });
+    gap(14);
   }
 
   textBlock(T.memo, $("f-memo").value);
