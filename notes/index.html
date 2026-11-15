@@ -774,13 +774,23 @@ async function moreMenu(n) {
   const v = await pick("더 보기", [
     { v: "copy", label: "글로 복사", sub: "카톡이나 문자에 붙여 넣을 수 있게" },
     { v: "print", label: "인쇄 · PDF로 저장", sub: "A4 한 장 모양으로" },
+    { v: "txt", label: "파일로 내려받기 (.txt)", sub: "메모장 · 한글 · 워드에서 열 수 있게" },
     n.kind === "manual" ? { v: "dup", label: "복제해서 새로 만들기", sub: "비슷한 매뉴얼을 만들 때" } : { v: "next", label: "이어서 다음 회의록", sub: "종류 · 장소 · 참석자를 그대로 채운 새 회의록" },
     { v: "del", label: "지우기" }]);
   if (v === "copy") toast(await copyText(plainText(n)) ? "글로 복사했습니다" : "복사하지 못했습니다");
+  else if (v === "txt") downloadText(n);
   else if (v === "print") setTimeout(() => window.print(), 300);
   else if (v === "dup") { const c = clone(n); Object.assign(c, { id: newId(), title: (n.title || "") + " (복사)", pinned: false, createdAt: Date.now(), updatedAt: Date.now() }); create(c); }
   else if (v === "next") { const c = blankMinutes(n); if (n.next) c.date = n.next; create(c); }
   else if (v === "del") delNote(n);
+}
+function downloadText(n) {
+  const name = ((n.kind === "minutes" && n.date ? n.date + " " : "") + (n.title || (n.kind === "minutes" ? "회의록" : "매뉴얼"))).replace(/[\/:*?"<>|]+/g, " ").trim().slice(0, 80);
+  const body = "\ufeff" + plainText(n).split("\n").join("\r\n");
+  const url = URL.createObjectURL(new Blob([body], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a"); a.href = url; a.download = name + ".txt";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  toast("내려받았습니다");
 }
 async function copyText(s) {
   try { await navigator.clipboard.writeText(s); return true; } catch (e) {
