@@ -1056,6 +1056,19 @@ $("logoutBtn").onclick = async () => {
 
 route();
 startSync();
+
+// ---------- 앱으로 설치 (크롬 · 엣지) ----------
+(() => {
+  let ev = null;
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = "앱으로 설치"; b.hidden = true;
+  b.style.cssText = "position:fixed;top:10px;right:10px;z-index:50;padding:8px 12px;font-size:13px;background:#1a1a1a;color:#fff;border:0;cursor:pointer";
+  document.body.appendChild(b);
+  addEventListener("beforeinstallprompt", e => { e.preventDefault(); ev = e; b.hidden = false; });
+  addEventListener("appinstalled", () => { ev = null; b.hidden = true; });
+  b.onclick = async () => { if (!ev) return; ev.prompt(); try { await ev.userChoice; } catch (e) {} ev = null; b.hidden = true; };
+})();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
 </html>
