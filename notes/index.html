@@ -208,6 +208,14 @@ dialog .btns .danger { background:var(--warn); border-color:var(--warn); }
   .step, .agenda, .ref, .todo { break-inside:avoid; }
   .decide { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
+
+.card.foldable h2 { cursor:pointer; user-select:none; }
+.card.foldable h2::after { content:"▾"; color:var(--sub); font-size:13px; }
+.card.foldable.fold { padding-top:12px; padding-bottom:12px; }
+.card.foldable.fold h2 { margin:0; }
+.card.foldable.fold h2::after { content:"▸"; }
+.card.foldable.fold > :not(h2) { display:none !important; }
+@media (min-width:1000px) { main, .bar > div { max-width:960px; } }
 </style>
 </head>
 <body>
@@ -980,8 +988,10 @@ async function startSync() {
   renderSync();
 }
 const syncText = () => !sync.ready ? "기록 맞추는 중…" : sync.offline || sync.failAt ? "오프라인 · 연결되면 맞춰짐" : sync.inflight ? "올리는 중…" : "연동됨";
+$("syncCard").querySelector("h2").addEventListener("click", () => { const sc = $("syncCard"); if (!sync.uid) return; const open = sc.classList.contains("fold"); sc.dataset.open = open ? "1" : ""; sc.classList.toggle("fold", !open); });
 function renderSync() {
   const on = !!sync.uid;
+  { const sc = $("syncCard"); sc.classList.add("foldable"); sc.classList.toggle("fold", on && sc.dataset.open !== "1"); }
   $("authForm").hidden = on || !sync.loaded;
   $("authIn").hidden = !on;
   $("authWho").textContent = on ? `${sync.email} 계정으로 연동 중` : "";
